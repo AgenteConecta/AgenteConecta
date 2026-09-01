@@ -1,0 +1,114 @@
+{
+  "owner": {
+    "name": "Vladimir Freire",
+    "role": "Engenheiro de Controle e Automação",
+    "company": "Newtek Automação"
+  },
+  "company": {
+    "name": "Newtek Automação",
+    "website": "https://newtekatm.com.br",
+    "trainingWebsite": "https://saladeaulavip.com.br",
+    "country": "Brasil"
+  },
+  "channels": {
+    "instagram": {
+      "handle": "@newtekatm",
+      "url": "https://www.instagram.com/newtekatm/"
+    },
+    "whatsapp": {
+      "number": "5562998449724",
+      "provider": "evolution"
+    }
+  },
+  "offers": {
+    "basicTraining": {
+      "name": "Treinamento de Automação Residencial",
+      "priceBRL": 164,
+      "credentialing": false
+    },
+    "credentialing": {
+      "name": "Treinamento Completo + Credenciamento Newtek",
+      "priceBRL": 297,
+      "credentialing": true,
+      "requirements": [
+        "complete_training",
+        "pass_certification_test",
+        "have_cnpj"
+      ]
+    }
+  },
+  "priorityStates": ["SP", "MG", "SC", "MT"],
+  "secondaryStates": ["GO", "PR", "RS", "RJ", "DF", "ES"],
+  "primarySegments": [
+    "residential_automation_integrator",
+    "electrician",
+    "electrical_company",
+    "automation_company",
+    "solar_company",
+    "security_company",
+    "network_installer",
+    "electrical_engineer",
+    "civil_engineer",
+    "architect"
+  ],
+  "centralizedAutomationKeywords": [
+    "automação residencial",
+    "automação cabeada",
+    "automação centralizada",
+    "painel de automação",
+    "quadro de automação",
+    "casa inteligente",
+    "smart home",
+    "automação de iluminação",
+    "controle de iluminação",
+    "integrador",
+    "integrador residencial",
+    "automação predial",
+    "KNX",
+    "Control4",
+    "Crestron",
+    "Lutron",
+    "Savant",
+    "RTI",
+    "Elan"
+  ],
+  "complementarySegments": [
+    "eletricista",
+    "empresa elétrica",
+    "instalações elétricas",
+    "quadros elétricos",
+    "engenharia elétrica",
+    "engenheiro eletricista",
+    "energia solar",
+    "fotovoltaica",
+    "CFTV",
+    "alarme",
+    "segurança eletrônica",
+    "redes",
+    "infraestrutura",
+    "home theater",
+    "áudio e vídeo",
+    "construtora",
+    "arquitetura",
+    "engenharia civil"
+  ],
+  "territoryOpportunityDefaults": {
+    "tier_1": 80,
+    "tier_2": 60,
+    "tier_3": 35
+  },
+  "safetyLimits": {
+    "MAX_DMS_PER_DAY": 30,
+    "MIN_SECONDS_BETWEEN_DMS": 90,
+    "MAX_SECONDS_BETWEEN_DMS": 240,
+    "OPERATING_HOURS": "09:00-20:00",
+    "OPERATING_TIMEZONE": "America/Sao_Paulo",
+    "WARMUP_ENABLED": true,
+    "MAX_FOLLOWUPS": 3
+  },
+  "kit": {
+    "name": "Kit Newtek",
+    "priceBRL": null,
+    "composition": []
+  }
+}

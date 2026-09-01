@@ -1,0 +1,15 @@
+.env
+.env.local
+.env.*.local
+config/business.json
+.chrome-profile/
+screenshots/
+traces/
+tokens/
+cookies/
+.next/
+node_modules/
+coverage/
+dist/
+tsconfig.tsbuildinfo
+*.log

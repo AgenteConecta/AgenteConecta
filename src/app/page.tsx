@@ -20,8 +20,8 @@ import {
 } from "lucide-react";
 import { formatBRL, loadBusinessConfig } from "@/lib/business-config";
 import { generateFirstContactMessage } from "@/features/conversations/first-contact";
-import { scoreLead } from "@/features/scoring/scoring";
 import { requiredTables } from "@/db/schema-notes";
+import { getDashboardData } from "@/features/analytics/dashboard-data";
 
 const menu = [
   "Visão Geral",
@@ -134,24 +134,56 @@ function FunnelPreview({ title, columns }: { title: string; columns: string[] })
   );
 }
 
-export default function Home() {
+export default async function Home() {
   const business = loadBusinessConfig();
-  const sampleScore = scoreLead(sampleLead);
-  const firstMessage = generateFirstContactMessage(sampleLead, sampleScore);
+  const dashboard = await getDashboardData();
+  const hotLead = dashboard.hotLead;
+  const hotLeadInput = hotLead
+    ? {
+        instagramUsername: `@${hotLead.instagram_username ?? ""}`,
+        displayName: hotLead.display_name ?? hotLead.instagram_username ?? "Lead",
+        bio: hotLead.bio ?? "",
+        city: hotLead.city ?? undefined,
+        state: hotLead.state ?? undefined,
+        discoveryKeyword: hotLead.discovery_keyword ?? undefined,
+      }
+    : sampleLead;
+  const firstMessage = generateFirstContactMessage(hotLeadInput, {
+    rawLeadScore: hotLead?.lead_score ?? 0,
+    leadScore: hotLead?.lead_score ?? 0,
+    commercialValueScore: hotLead?.commercial_value_score ?? 0,
+    leadType: hotLead?.lead_type === "business" || hotLead?.lead_type === "professional" || hotLead?.lead_type === "learner" ? hotLead.lead_type : "unknown",
+    marketAwareness:
+      hotLead?.market_awareness === "competing_solution_user" ||
+      hotLead?.market_awareness === "professional_integrator" ||
+      hotLead?.market_awareness === "solution_aware" ||
+      hotLead?.market_awareness === "automation_aware" ||
+      hotLead?.market_awareness === "problem_aware"
+        ? hotLead.market_awareness
+        : "unaware",
+    geographyTier: "tier_3",
+    territoryOpportunityScore: 0,
+    projectReadiness: "unknown",
+    businessType: hotLead?.lead_type ?? "unknown",
+    estimatedRole: "unknown",
+    scoreExplanation: [],
+    commercialExplanation: [],
+  });
+  const responseRate = dashboard.metrics.dmsSent > 0 ? `${Math.round((dashboard.metrics.responses / dashboard.metrics.dmsSent) * 100)}%` : "0%";
 
   const metrics = [
-    ["Leads descobertos hoje", "382", Search, "text-pine"],
-    ["Leads qualificados", "91", Gauge, "text-sky"],
-    ["DMs enviadas", "18", Send, "text-coral"],
-    ["Taxa de resposta", "38,9%", MessageCircle, "text-pine"],
-    ["Interessados", "4", Flame, "text-coral"],
-    ["WhatsApps iniciados", "3", Smartphone, "text-sky"],
-    [`Vendas ${formatBRL(business.offers.basicTraining.priceBRL)}`, "1", GraduationCap, "text-pine"],
-    [`Vendas ${formatBRL(business.offers.credentialing.priceBRL)}`, "1", BriefcaseBusiness, "text-pine"],
-    ["Credenciamentos", "1", BadgeCheck, "text-sky"],
-    ["Revendedores ativos", "1", Handshake, "text-pine"],
-    ["Receita atribuída", formatBRL(461), CircleDollarSign, "text-amber"],
-    ["Custo OpenAI", "US$ 0,84", Bot, "text-ink"],
+    ["Leads descobertos hoje", String(dashboard.metrics.leadsDiscoveredToday), Search, "text-pine"],
+    ["Leads qualificados", String(dashboard.metrics.qualifiedLeads), Gauge, "text-sky"],
+    ["DMs enviadas", String(dashboard.metrics.dmsSent), Send, "text-coral"],
+    ["Taxa de resposta", responseRate, MessageCircle, "text-pine"],
+    ["Interessados", String(dashboard.metrics.responses), Flame, "text-coral"],
+    ["WhatsApps iniciados", String(dashboard.metrics.whatsappStarted), Smartphone, "text-sky"],
+    [`Vendas ${formatBRL(business.offers.basicTraining.priceBRL)}`, String(dashboard.metrics.trainingSales), GraduationCap, "text-pine"],
+    [`Vendas ${formatBRL(business.offers.credentialing.priceBRL)}`, String(dashboard.metrics.credentialingSales), BriefcaseBusiness, "text-pine"],
+    ["Credenciamentos", String(dashboard.metrics.credentialedPartners), BadgeCheck, "text-sky"],
+    ["Revendedores ativos", String(dashboard.metrics.activeResellers), Handshake, "text-pine"],
+    ["Receita atribuída", formatBRL(dashboard.metrics.attributedRevenue), CircleDollarSign, "text-amber"],
+    ["Custo OpenAI", `US$ ${dashboard.metrics.openAiCost.toFixed(2)}`, Bot, "text-ink"],
   ] as const;
 
   return (
@@ -214,9 +246,10 @@ export default function Home() {
               </div>
               <div className="grid gap-5 md:grid-cols-[1fr_220px]">
                 <div>
-                  <div className="text-2xl font-semibold">{sampleLead.displayName}</div>
+                  <div className="text-2xl font-semibold">{hotLeadInput.displayName}</div>
                   <div className="mt-1 text-sm text-ink/65">
-                    {sampleLead.city}/{sampleLead.state} · Automação residencial · Control4 · Projetos alto padrão
+                    {hotLeadInput.city ?? "Cidade não identificada"}/{hotLeadInput.state ?? "UF"} · {hotLead?.lead_type ?? "tipo pendente"} ·{" "}
+                    {hotLead?.market_awareness ?? "awareness pendente"} · {hotLead?.discovery_keyword ?? "origem pendente"}
                   </div>
                   <div className="mt-5 rounded-md bg-[#f7f8f5] p-4">
                     <div className="text-sm font-medium text-ink/70">Primeira abordagem gerada</div>
@@ -226,19 +259,19 @@ export default function Home() {
                 <div className="grid grid-cols-2 gap-3 md:grid-cols-1">
                   <div className="rounded-md bg-mint p-4">
                     <div className="text-sm text-pine">Lead Score</div>
-                    <div className="text-3xl font-semibold text-pine">{sampleScore.leadScore}</div>
+                    <div className="text-3xl font-semibold text-pine">{hotLead?.lead_score ?? 0}</div>
                   </div>
                   <div className="rounded-md bg-[#fff4d9] p-4">
                     <div className="text-sm text-ink/70">Commercial Value</div>
-                    <div className="text-3xl font-semibold">{sampleScore.commercialValueScore}</div>
+                    <div className="text-3xl font-semibold">{hotLead?.commercial_value_score ?? 0}</div>
                   </div>
                 </div>
               </div>
               <div className="mt-5 grid gap-2 sm:grid-cols-2">
-                {sampleScore.scoreExplanation.slice(0, 6).map((item) => (
-                  <div key={item.label} className="flex items-center justify-between rounded-md border border-black/10 px-3 py-2 text-sm">
-                    <span>{item.label}</span>
-                    <span className="font-semibold text-pine">+{item.points}</span>
+                {dashboard.recentLeads.slice(0, 6).map((lead) => (
+                  <div key={lead.id} className="flex items-center justify-between rounded-md border border-black/10 px-3 py-2 text-sm">
+                    <span>@{lead.instagram_username}</span>
+                    <span className="font-semibold text-pine">{lead.lead_score ?? 0}/{lead.commercial_value_score ?? 0}</span>
                   </div>
                 ))}
               </div>

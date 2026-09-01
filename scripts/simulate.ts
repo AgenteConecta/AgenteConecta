@@ -1,5 +1,9 @@
-import { generateFirstContactMessage } from "@/features/conversations/first-contact";
-import { scoreLead } from "@/features/scoring/scoring";
+import nextEnv from "@next/env";
+
+nextEnv.loadEnvConfig(process.cwd());
+
+const { generateFirstContactMessage } = await import("@/features/conversations/first-contact");
+const { scoreLead } = await import("@/features/scoring/scoring");
 
 const lead = {
   instagramUsername: "@automax_integracoes",
@@ -24,3 +28,4 @@ console.log(
     2,
   ),
 );
+process.exit(0);

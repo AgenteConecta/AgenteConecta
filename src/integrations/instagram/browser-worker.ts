@@ -176,12 +176,16 @@ export async function readInstagramPublicProfile(username: string): Promise<Lead
     await page.waitForTimeout(2500);
 
     const profile = await page.evaluate(() => {
-      const title = document.title.replace("• Instagram photos and videos", "").replace("(@", " @").trim();
+      const title = document.title
+        .replace(/^\(\d+\)\s*/, "")
+        .replace("• Instagram photos and videos", "")
+        .replace("(@", " @")
+        .trim();
       const description =
         document.querySelector<HTMLMetaElement>('meta[name="description"]')?.content ??
         document.querySelector<HTMLMetaElement>('meta[property="og:description"]')?.content ??
         "";
-      const visibleText = (document.body.textContent ?? "").replace(/\s+/g, " ").slice(0, 1200);
+      const headerText = (document.querySelector("header")?.textContent ?? "").replace(/\s+/g, " ").slice(0, 700);
       const website = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href^="http"]'))
         .map((anchor) => anchor.href)
         .find((href) => !href.includes("instagram.com"));
@@ -189,19 +193,17 @@ export async function readInstagramPublicProfile(username: string): Promise<Lead
       return {
         title,
         description,
-        visibleText,
+        headerText,
         website,
       };
     });
 
-    const displayName = profile.title && !profile.title.startsWith("(") && profile.title !== "Instagram"
-      ? profile.title
-      : normalizedUsername;
+    const displayName = profile.title && profile.title !== "Instagram" ? profile.title : normalizedUsername;
 
     return {
       instagramUsername: `@${normalizedUsername}`,
       displayName,
-      bio: [profile.description, profile.visibleText].filter(Boolean).join(" "),
+      bio: [profile.description, profile.headerText].filter(Boolean).join(" "),
       website: profile.website,
       country: "Brasil",
     };

@@ -49,3 +49,15 @@ Mantenha o debug apenas em `127.0.0.1`.
 ```powershell
 npm run dev
 ```
+
+## 6. Evolution API
+
+Preencha no `.env.local`:
+
+```text
+EVOLUTION_API_URL=
+EVOLUTION_API_KEY=
+EVOLUTION_INSTANCE=
+```
+
+O nome da instância pode ter espaços e acentos; o sistema codifica esse valor ao chamar a API.

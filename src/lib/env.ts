@@ -23,3 +23,7 @@ export function integrationReady(...values: Array<string | undefined>): boolean 
 export function normalizeSupabaseUrl(url: string): string {
   return url.replace(/\/rest\/v1\/?$/, "").replace(/\/$/, "");
 }
+
+export function normalizeBaseUrl(url: string): string {
+  return url.replace(/\/$/, "");
+}

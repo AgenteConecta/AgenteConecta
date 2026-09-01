@@ -1,4 +1,4 @@
-import { env, integrationReady } from "@/lib/env";
+import { env, integrationReady, normalizeBaseUrl } from "@/lib/env";
 
 export type EvolutionSendMessageInput = {
   leadId: string;
@@ -12,6 +12,27 @@ export type EvolutionSendMessageResult = {
   externalId: string | null;
 };
 
+export function getEvolutionStatus() {
+  return {
+    configured: integrationReady(env.evolutionApiUrl, env.evolutionApiKey, env.evolutionInstance),
+    mode: env.appMode,
+    liveSendEnabled: env.appMode === "production",
+    instanceConfigured: Boolean(env.evolutionInstance),
+  };
+}
+
+export function buildEvolutionUrl(path: string): string {
+  if (!env.evolutionApiUrl) {
+    throw new Error("Missing EVOLUTION_API_URL");
+  }
+
+  return `${normalizeBaseUrl(env.evolutionApiUrl)}${path}`;
+}
+
+export function encodeEvolutionInstance(instance: string): string {
+  return encodeURIComponent(instance);
+}
+
 export async function sendEvolutionMessage(input: EvolutionSendMessageInput): Promise<EvolutionSendMessageResult> {
   const ready = integrationReady(env.evolutionApiUrl, env.evolutionApiKey, env.evolutionInstance);
 
@@ -23,7 +44,8 @@ export async function sendEvolutionMessage(input: EvolutionSendMessageInput): Pr
     };
   }
 
-  const response = await fetch(`${env.evolutionApiUrl}/message/sendText/${env.evolutionInstance}`, {
+  const instance = encodeEvolutionInstance(env.evolutionInstance as string);
+  const response = await fetch(buildEvolutionUrl(`/message/sendText/${instance}`), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

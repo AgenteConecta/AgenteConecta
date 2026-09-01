@@ -17,6 +17,10 @@ Nunca versionar:
 
 A chave da OpenAI deve ficar apenas em arquivo local ignorado ou variável de ambiente. Se uma chave for exposta em texto claro, rotacione a chave no painel da OpenAI.
 
+## Evolution API
+
+A chave da Evolution API permite enviar mensagens pelo WhatsApp conectado. Se ela for exposta em texto claro, rotacione a chave no servidor Evolution antes de operar em `pilot` ou `production`.
+
 ## Claims
 
 A IA só pode afirmar claims com `status = verified`. Claims pendentes, bloqueados ou expirados não devem aparecer em mensagens comerciais.

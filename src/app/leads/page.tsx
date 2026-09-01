@@ -1,24 +1,108 @@
-import { CheckCircle2, Filter, Search, Send, UserRoundSearch } from "lucide-react";
-import { approveLeadForOutreach, listLeadsForReview } from "@/features/leads/review-repository";
-import { generateFirstContactMessage } from "@/features/conversations/first-contact";
-import { scoreLead } from "@/features/scoring/scoring";
-import { identifyProspectingLane, prospectingLaneLabel, type ProspectingLane } from "@/features/prospecting/prospecting-lane";
+import {
+  AlertTriangle,
+  Ban,
+  CheckCircle2,
+  Clock3,
+  ExternalLink,
+  Filter,
+  Handshake,
+  MessageSquareText,
+  Search,
+  Sparkles,
+  Trash2,
+  UserRoundSearch,
+} from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { generateFirstContactMessage } from "@/features/conversations/first-contact";
+import { approveLeadForOutreach, listLeadsForReview, updateLeadReviewState } from "@/features/leads/review-repository";
+import { identifyProspectingLane, prospectingLaneLabel, type ProspectingLane } from "@/features/prospecting/prospecting-lane";
+import { scoreLead } from "@/features/scoring/scoring";
 
 type SearchParams = Promise<{
   q?: string;
   minScore?: string;
   lane?: string;
+  selected?: string;
 }>;
+
+type LeadRow = Awaited<ReturnType<typeof listLeadsForReview>>[number];
 
 function scoreTone(score: number) {
   if (score >= 70) {
-    return "bg-mint text-pine";
+    return "bg-pine text-white";
   }
   if (score >= 35) {
-    return "bg-[#fff4d9] text-ink";
+    return "bg-amber text-ink";
   }
-  return "bg-[#f1f2ee] text-ink/70";
+  return "bg-[#e8ebe3] text-ink/70";
+}
+
+function statusLabel(state?: string | null) {
+  const labels: Record<string, string> = {
+    none: "Novo",
+    approved_for_outreach: "Aprovado",
+    partnership_review: "Parceria",
+    nurture_later: "Nutrir depois",
+    rejected: "Descartado",
+    do_not_contact: "Não contatar",
+  };
+
+  return labels[state ?? "none"] ?? state ?? "Novo";
+}
+
+function toLeadInput(lead: LeadRow) {
+  return {
+    instagramUsername: `@${lead.instagram_username ?? ""}`,
+    displayName: lead.display_name ?? lead.instagram_username ?? "Lead",
+    bio: lead.bio ?? "",
+    city: lead.city ?? undefined,
+    state: lead.state ?? undefined,
+    discoveryKeyword: lead.discovery_keyword ?? undefined,
+  };
+}
+
+function laneForLead(lead: LeadRow): ProspectingLane {
+  const input = toLeadInput(lead);
+  const computedScore = scoreLead(input);
+
+  return identifyProspectingLane(input, {
+    ...computedScore,
+    leadScore: lead.lead_score ?? computedScore.leadScore,
+    commercialValueScore: lead.commercial_value_score ?? computedScore.commercialValueScore,
+    leadType:
+      lead.lead_type === "learner" || lead.lead_type === "professional" || lead.lead_type === "business"
+        ? lead.lead_type
+        : computedScore.leadType,
+  });
+}
+
+function ReviewAction({
+  lead,
+  lane,
+  action,
+  label,
+  icon: Icon,
+  tone,
+}: {
+  lead: LeadRow;
+  lane: ProspectingLane;
+  action: string;
+  label: string;
+  icon: typeof CheckCircle2;
+  tone: string;
+}) {
+  return (
+    <form action={action === "approve" ? approveLeadForOutreach : updateLeadReviewState}>
+      <input name="leadId" type="hidden" value={lead.id} />
+      <input name="lane" type="hidden" value={lane} />
+      <input name="username" type="hidden" value={`@${lead.instagram_username ?? ""}`} />
+      <input name="action" type="hidden" value={action} />
+      <button className={`inline-flex h-9 w-full items-center justify-center gap-2 rounded-md px-3 text-sm font-medium ${tone}`}>
+        <Icon className="h-4 w-4" />
+        {label}
+      </button>
+    </form>
+  );
 }
 
 export default async function LeadsPage({ searchParams }: { searchParams: SearchParams }) {
@@ -28,146 +112,198 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
     minScore: params.minScore ? Number(params.minScore) : undefined,
   });
 
-  const enriched = leads
-    .map((lead) => {
-      const input = {
-        instagramUsername: `@${lead.instagram_username ?? ""}`,
-        displayName: lead.display_name ?? lead.instagram_username ?? "Lead",
-        bio: lead.bio ?? "",
-        city: lead.city ?? undefined,
-        state: lead.state ?? undefined,
-        discoveryKeyword: lead.discovery_keyword ?? undefined,
-      };
-      const computedScore = scoreLead(input);
-      const lane = identifyProspectingLane(input, {
-        ...computedScore,
-        leadScore: lead.lead_score ?? computedScore.leadScore,
-        commercialValueScore: lead.commercial_value_score ?? computedScore.commercialValueScore,
-        leadType:
-          lead.lead_type === "learner" || lead.lead_type === "professional" || lead.lead_type === "business"
-            ? lead.lead_type
-            : computedScore.leadType,
-      });
+  const rows = leads
+    .map((lead) => ({
+      lead,
+      lane: laneForLead(lead),
+      input: toLeadInput(lead),
+    }))
+    .filter((row) => !params.lane || params.lane === "all" || row.lane === params.lane);
 
-      return {
-        lead,
-        input,
-        lane,
-        firstMessage: generateFirstContactMessage(input, computedScore),
-      };
-    })
-    .filter((item) => !params.lane || params.lane === "all" || item.lane === params.lane);
+  const selected = rows.find((row) => row.lead.id === params.selected) ?? rows[0] ?? null;
+  const counts = rows.reduce(
+    (acc, row) => {
+      acc[row.lane] += 1;
+      return acc;
+    },
+    { training: 0, credentialing: 0, equipment: 0, partnership: 0, review: 0 } satisfies Record<ProspectingLane, number>,
+  );
 
   return (
     <AppShell active="Leads">
       <header className="border-b border-black/10 bg-white px-5 py-4 md:px-8">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
-            <p className="text-sm font-medium text-pine">Revisão comercial</p>
-            <h1 className="text-2xl font-semibold tracking-normal md:text-3xl">Leads reais</h1>
+            <p className="text-sm font-medium text-pine">CRM de prospecção</p>
+            <h1 className="text-2xl font-semibold tracking-normal md:text-3xl">Mesa de revisão de leads</h1>
           </div>
-          <div className="inline-flex items-center gap-2 rounded-md bg-mint px-3 py-2 text-sm font-medium text-pine">
-            <UserRoundSearch className="h-4 w-4" />
-            {enriched.length} em revisão
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+            {Object.entries(counts).map(([lane, count]) => (
+              <div key={lane} className="rounded-md border border-black/10 bg-[#f7f8f5] px-3 py-2">
+                <div className="text-xs text-ink/55">{prospectingLaneLabel(lane as ProspectingLane)}</div>
+                <div className="text-lg font-semibold">{count}</div>
+              </div>
+            ))}
           </div>
         </div>
       </header>
 
-      <div className="space-y-5 px-5 py-6 md:px-8">
-        <form className="grid gap-3 rounded-lg border border-black/10 bg-white p-4 shadow-panel md:grid-cols-[1fr_170px_220px_auto]">
-          <label className="flex items-center gap-2 rounded-md border border-black/10 px-3 py-2">
-            <Search className="h-4 w-4 text-ink/50" />
-            <input className="w-full bg-transparent text-sm outline-none" defaultValue={params.q ?? ""} name="q" placeholder="Buscar por Instagram, nome, bio ou palavra-chave" />
-          </label>
-          <select className="rounded-md border border-black/10 bg-white px-3 py-2 text-sm" defaultValue={params.minScore ?? ""} name="minScore">
-            <option value="">Score mínimo</option>
-            <option value="20">20+</option>
-            <option value="35">35+</option>
-            <option value="50">50+</option>
-            <option value="70">70+</option>
-          </select>
-          <select className="rounded-md border border-black/10 bg-white px-3 py-2 text-sm" defaultValue={params.lane ?? "all"} name="lane">
-            <option value="all">Todas as linhas</option>
-            <option value="training">Treinamento</option>
-            <option value="credentialing">Credenciamento</option>
-            <option value="equipment">Equipamentos</option>
-            <option value="partnership">Parceria/divulgação</option>
-            <option value="review">Revisão</option>
-          </select>
-          <button className="inline-flex items-center justify-center gap-2 rounded-md bg-pine px-4 py-2 text-sm font-medium text-white">
-            <Filter className="h-4 w-4" />
-            Filtrar
-          </button>
-        </form>
+      <div className="grid min-h-[calc(100vh-89px)] grid-cols-1 xl:grid-cols-[minmax(680px,1fr)_420px]">
+        <section className="border-r border-black/10 px-5 py-5 md:px-8">
+          <form className="grid gap-3 border-b border-black/10 pb-4 md:grid-cols-[1fr_150px_210px_auto]">
+            <label className="flex h-10 items-center gap-2 rounded-md border border-black/10 bg-white px-3">
+              <Search className="h-4 w-4 text-ink/45" />
+              <input className="w-full bg-transparent text-sm outline-none" defaultValue={params.q ?? ""} name="q" placeholder="Buscar username, bio, palavra-chave" />
+            </label>
+            <select className="h-10 rounded-md border border-black/10 bg-white px-3 text-sm" defaultValue={params.minScore ?? ""} name="minScore">
+              <option value="">Score mínimo</option>
+              <option value="20">20+</option>
+              <option value="35">35+</option>
+              <option value="50">50+</option>
+              <option value="70">70+</option>
+            </select>
+            <select className="h-10 rounded-md border border-black/10 bg-white px-3 text-sm" defaultValue={params.lane ?? "all"} name="lane">
+              <option value="all">Todas as linhas</option>
+              <option value="training">Treinamento</option>
+              <option value="credentialing">Credenciamento</option>
+              <option value="equipment">Equipamentos</option>
+              <option value="partnership">Parceria/divulgação</option>
+              <option value="review">Revisão</option>
+            </select>
+            <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-pine px-4 text-sm font-medium text-white">
+              <Filter className="h-4 w-4" />
+              Filtrar
+            </button>
+          </form>
 
-        <section className="grid gap-3">
-          {enriched.map(({ lead, input, lane, firstMessage }) => {
-            const leadScore = lead.lead_score ?? 0;
-            const commercialScore = lead.commercial_value_score ?? 0;
-            return (
-              <article key={lead.id} className="rounded-lg border border-black/10 bg-white p-4 shadow-panel">
-                <div className="grid gap-4 lg:grid-cols-[1fr_220px]">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <a className="text-lg font-semibold text-pine hover:underline" href={`https://www.instagram.com/${lead.instagram_username}/`} rel="noreferrer" target="_blank">
-                        @{lead.instagram_username}
-                      </a>
-                      <span className="rounded-md bg-[#f1f2ee] px-2 py-1 text-xs font-medium text-ink/70">{prospectingLaneLabel(lane as ProspectingLane)}</span>
-                      <span className="rounded-md bg-[#f1f2ee] px-2 py-1 text-xs font-medium text-ink/70">{lead.discovery_keyword ?? "sem keyword"}</span>
-                    </div>
-                    <div className="mt-1 text-sm text-ink/65">
-                      {lead.display_name ?? "Nome não identificado"} · {lead.city ?? "Cidade não identificada"}/{lead.state ?? "UF"} · {lead.lead_type ?? "unknown"} ·{" "}
-                      {lead.market_awareness ?? "unaware"}
-                    </div>
-                    <p className="mt-3 line-clamp-2 text-sm leading-6 text-ink/75">{lead.bio || "Bio ainda não capturada."}</p>
-                    <div className="mt-3 rounded-md bg-[#f7f8f5] p-3 text-sm leading-6">
-                      <span className="font-medium text-ink/70">Mensagem sugerida: </span>
-                      {lane === "partnership"
-                        ? `Olá, ${input.displayName.split(" ")[0]}. Vi que você produz conteúdo ou atua como referência em automação. Faz sentido conversarmos sobre conhecer a solução Newtek para uma possível parceria ou divulgação?`
-                        : firstMessage}
-                    </div>
-                  </div>
-
-                  <div className="grid content-between gap-3">
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className={`rounded-md p-3 ${scoreTone(leadScore)}`}>
-                        <div className="text-xs">Lead Score</div>
-                        <div className="text-2xl font-semibold">{leadScore}</div>
+          <div className="mt-4 overflow-x-auto rounded-lg border border-black/10 bg-white shadow-panel">
+            <div className="min-w-[760px]">
+              <div className="grid grid-cols-[minmax(230px,1.2fr)_145px_95px_95px_130px] border-b border-black/10 bg-[#f1f2ee] px-4 py-3 text-xs font-semibold uppercase text-ink/55">
+                <div>Lead</div>
+                <div>Linha</div>
+                <div>Score</div>
+                <div>Valor</div>
+                <div>Status</div>
+              </div>
+              <div className="divide-y divide-black/10">
+                {rows.map(({ lead, lane }) => {
+                  const isSelected = selected?.lead.id === lead.id;
+                  return (
+                    <a
+                      className={`grid grid-cols-[minmax(230px,1.2fr)_145px_95px_95px_130px] px-4 py-3 text-sm transition hover:bg-mint/45 ${isSelected ? "bg-mint/70" : ""}`}
+                      href={`/leads?q=${params.q ?? ""}&minScore=${params.minScore ?? ""}&lane=${params.lane ?? "all"}&selected=${lead.id}`}
+                      key={lead.id}
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate font-semibold text-ink">@{lead.instagram_username}</div>
+                        <div className="truncate text-xs text-ink/55">{lead.display_name ?? "Nome não identificado"}</div>
                       </div>
-                      <div className={`rounded-md p-3 ${scoreTone(commercialScore)}`}>
-                        <div className="text-xs">Valor comercial</div>
-                        <div className="text-2xl font-semibold">{commercialScore}</div>
+                      <div className="flex items-center">
+                        <span className="rounded-md bg-[#f1f2ee] px-2 py-1 text-xs font-medium">{prospectingLaneLabel(lane)}</span>
                       </div>
-                    </div>
-                    <form action={approveLeadForOutreach}>
-                      <input name="leadId" type="hidden" value={lead.id} />
-                      <input name="lane" type="hidden" value={lane} />
-                      <input name="username" type="hidden" value={`@${lead.instagram_username ?? ""}`} />
-                      <button className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-pine px-3 py-2 text-sm font-medium text-white">
-                        <CheckCircle2 className="h-4 w-4" />
-                        Aprovar abordagem
-                      </button>
-                    </form>
-                  </div>
-                </div>
-              </article>
-            );
-          })}
-
-          {enriched.length === 0 ? (
-            <div className="rounded-lg border border-black/10 bg-white p-8 text-center text-sm text-ink/65 shadow-panel">
-              Nenhum lead encontrado com esses filtros.
+                      <div>
+                        <span className={`inline-flex min-w-12 justify-center rounded-md px-2 py-1 text-xs font-semibold ${scoreTone(lead.lead_score ?? 0)}`}>{lead.lead_score ?? 0}</span>
+                      </div>
+                      <div>
+                        <span className={`inline-flex min-w-12 justify-center rounded-md px-2 py-1 text-xs font-semibold ${scoreTone(lead.commercial_value_score ?? 0)}`}>
+                          {lead.commercial_value_score ?? 0}
+                        </span>
+                      </div>
+                      <div className="truncate text-xs text-ink/60">{statusLabel(lead.channel_state)}</div>
+                    </a>
+                  );
+                })}
+              </div>
             </div>
-          ) : null}
+          </div>
         </section>
 
-        <div className="rounded-lg border border-black/10 bg-white p-4 text-sm leading-6 text-ink/70 shadow-panel">
-          <div className="mb-1 flex items-center gap-2 font-medium text-ink">
-            <Send className="h-4 w-4" />
-            Controle de envio
-          </div>
-          Aprovar abordagem apenas registra o lead para revisão operacional. O sistema continua em dry-run e nenhuma DM é enviada automaticamente.
-        </div>
+        <aside className="bg-white px-5 py-5 md:px-6">
+          {selected ? (
+            <div className="sticky top-0 space-y-5">
+              <div>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-xs font-medium uppercase text-ink/45">Lead selecionado</div>
+                    <h2 className="mt-1 text-2xl font-semibold">@{selected.lead.instagram_username}</h2>
+                    <p className="mt-1 text-sm text-ink/60">{selected.lead.display_name ?? "Nome não identificado"}</p>
+                  </div>
+                  <a
+                    aria-label="Abrir perfil no Instagram"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-black/10 text-ink/65"
+                    href={`https://www.instagram.com/${selected.lead.instagram_username}/`}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                  </a>
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  <div className={`rounded-md p-3 ${scoreTone(selected.lead.lead_score ?? 0)}`}>
+                    <div className="text-xs opacity-80">Lead Score</div>
+                    <div className="text-2xl font-semibold">{selected.lead.lead_score ?? 0}</div>
+                  </div>
+                  <div className={`rounded-md p-3 ${scoreTone(selected.lead.commercial_value_score ?? 0)}`}>
+                    <div className="text-xs opacity-80">Valor comercial</div>
+                    <div className="text-2xl font-semibold">{selected.lead.commercial_value_score ?? 0}</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-black/10 bg-[#f7f8f5] p-4">
+                <div className="mb-3 flex items-center gap-2 font-semibold">
+                  <Sparkles className="h-4 w-4 text-pine" />
+                  Diagnóstico
+                </div>
+                <div className="grid gap-2 text-sm">
+                  <div className="flex justify-between gap-4"><span className="text-ink/55">Linha</span><strong>{prospectingLaneLabel(selected.lane)}</strong></div>
+                  <div className="flex justify-between gap-4"><span className="text-ink/55">Tipo</span><strong>{selected.lead.lead_type ?? "unknown"}</strong></div>
+                  <div className="flex justify-between gap-4"><span className="text-ink/55">Consciência</span><strong>{selected.lead.market_awareness ?? "unaware"}</strong></div>
+                  <div className="flex justify-between gap-4"><span className="text-ink/55">Origem</span><strong>{selected.lead.discovery_keyword ?? "sem keyword"}</strong></div>
+                  <div className="flex justify-between gap-4"><span className="text-ink/55">Status</span><strong>{statusLabel(selected.lead.channel_state)}</strong></div>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-black/10 bg-white">
+                <div className="border-b border-black/10 px-4 py-3 font-semibold">Bio capturada</div>
+                <p className="max-h-40 overflow-auto px-4 py-3 text-sm leading-6 text-ink/70">{selected.lead.bio || "Sem bio capturada."}</p>
+              </div>
+
+              <div className="rounded-lg border border-black/10 bg-white">
+                <div className="border-b border-black/10 px-4 py-3 font-semibold">Abordagem sugerida</div>
+                <p className="px-4 py-3 text-sm leading-6 text-ink/75">
+                  {selected.lane === "partnership"
+                    ? `Olá, ${selected.input.displayName.split(" ")[0]}. Vi que você produz conteúdo ou atua como referência em automação. Faz sentido conversarmos sobre conhecer a solução Newtek para uma possível parceria ou divulgação?`
+                    : generateFirstContactMessage(selected.input, scoreLead(selected.input))}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <ReviewAction action="approve" icon={CheckCircle2} label="Aprovar" lane={selected.lane} lead={selected.lead} tone="bg-pine text-white" />
+                <ReviewAction action="partnership" icon={Handshake} label="Parceria" lane={selected.lane} lead={selected.lead} tone="bg-sky text-white" />
+                <ReviewAction action="nurture" icon={Clock3} label="Nutrir" lane={selected.lane} lead={selected.lead} tone="bg-[#f1f2ee] text-ink" />
+                <ReviewAction action="reject" icon={Trash2} label="Descartar" lane={selected.lane} lead={selected.lead} tone="bg-[#f1f2ee] text-ink" />
+                <div className="col-span-2">
+                  <ReviewAction action="do_not_contact" icon={Ban} label="Não contatar" lane={selected.lane} lead={selected.lead} tone="bg-coral text-white" />
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-black/10 bg-[#f7f8f5] p-4 text-sm leading-6 text-ink/65">
+                <div className="mb-1 flex items-center gap-2 font-semibold text-ink">
+                  <MessageSquareText className="h-4 w-4" />
+                  Segurança operacional
+                </div>
+                Nenhuma ação desta tela envia DM. Ela registra decisão, estado e evento no CRM para formar uma fila revisada.
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-black/10 bg-[#f7f8f5] p-6 text-sm text-ink/65">
+              <AlertTriangle className="mb-3 h-5 w-5 text-coral" />
+              Nenhum lead encontrado para revisar.
+            </div>
+          )}
+        </aside>
       </div>
     </AppShell>
   );

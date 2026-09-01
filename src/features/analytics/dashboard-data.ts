@@ -13,6 +13,9 @@ export type DashboardLead = {
   commercial_value_score: number | null;
   discovery_keyword: string | null;
   discovered_at: string | null;
+  channel_state: string | null;
+  do_not_contact: boolean | null;
+  human_review_required: boolean | null;
 };
 
 export type DashboardData = {
@@ -91,13 +94,13 @@ export async function getDashboardData(): Promise<DashboardData> {
     supabase.from("ai_calls").select("estimated_cost"),
     supabase
       .from("leads")
-      .select("id, instagram_username, display_name, bio, city, state, lead_type, market_awareness, lead_score, commercial_value_score, discovery_keyword, discovered_at")
+      .select("id, instagram_username, display_name, bio, city, state, lead_type, market_awareness, lead_score, commercial_value_score, discovery_keyword, discovered_at, channel_state, do_not_contact, human_review_required")
       .order("commercial_value_score", { ascending: false })
       .limit(1)
       .maybeSingle(),
     supabase
       .from("leads")
-      .select("id, instagram_username, display_name, bio, city, state, lead_type, market_awareness, lead_score, commercial_value_score, discovery_keyword, discovered_at")
+      .select("id, instagram_username, display_name, bio, city, state, lead_type, market_awareness, lead_score, commercial_value_score, discovery_keyword, discovered_at, channel_state, do_not_contact, human_review_required")
       .order("discovered_at", { ascending: false })
       .limit(8),
   ]);

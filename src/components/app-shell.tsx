@@ -40,6 +40,11 @@ export function AppShell({
             <div className="text-xs text-ink/60">Sales Engine</div>
           </div>
         </div>
+        <div className="mb-4 rounded-lg border border-black/10 bg-[#f7f8f5] p-3">
+          <div className="text-xs font-medium uppercase text-ink/45">Operação</div>
+          <div className="mt-2 text-sm font-semibold text-ink">Dry-run ativo</div>
+          <div className="mt-1 text-xs leading-5 text-ink/60">Leitura e CRM ligados. Envio real bloqueado.</div>
+        </div>
         <nav className="space-y-1">
           {menu.map(([item, href]) => (
             <Link

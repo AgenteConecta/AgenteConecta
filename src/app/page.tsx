@@ -3,7 +3,6 @@ import {
   BadgeCheck,
   Bot,
   BriefcaseBusiness,
-  CircuitBoard,
   CircleDollarSign,
   Flame,
   Gauge,
@@ -22,26 +21,7 @@ import { formatBRL, loadBusinessConfig } from "@/lib/business-config";
 import { generateFirstContactMessage } from "@/features/conversations/first-contact";
 import { requiredTables } from "@/db/schema-notes";
 import { getDashboardData } from "@/features/analytics/dashboard-data";
-
-const menu = [
-  "Visão Geral",
-  "Leads",
-  "Treinamento",
-  "Credenciamento",
-  "Conversas",
-  "Prospecção",
-  "Campanhas",
-  "Regiões",
-  "Experimentos",
-  "WhatsApp",
-  "Instagram",
-  "Agentes",
-  "Claims",
-  "Jobs",
-  "Custos",
-  "Configurações",
-  "Logs",
-];
+import { AppShell } from "@/components/app-shell";
 
 const sampleLead = {
   instagramUsername: "@automax_integracoes",
@@ -187,31 +167,7 @@ export default async function Home() {
   ] as const;
 
   return (
-    <main className="min-h-screen bg-[#f7f8f5] text-ink">
-      <aside className="fixed inset-y-0 left-0 hidden w-64 border-r border-black/10 bg-white px-4 py-5 lg:block">
-        <div className="mb-7 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-md bg-pine text-white">
-            <CircuitBoard className="h-5 w-5" />
-          </div>
-          <div>
-            <div className="font-semibold">Newtek</div>
-            <div className="text-xs text-ink/60">Sales Engine</div>
-          </div>
-        </div>
-        <nav className="space-y-1">
-          {menu.map((item, index) => (
-            <a
-              className={`block rounded-md px-3 py-2 text-sm ${index === 0 ? "bg-mint font-medium text-pine" : "text-ink/70 hover:bg-black/5"}`}
-              href="#"
-              key={item}
-            >
-              {item}
-            </a>
-          ))}
-        </nav>
-      </aside>
-
-      <div className="lg:pl-64">
+    <AppShell active="Visão Geral">
         <header className="border-b border-black/10 bg-white px-5 py-4 md:px-8">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
@@ -312,7 +268,6 @@ export default async function Home() {
             </div>
           </section>
         </div>
-      </div>
-    </main>
+    </AppShell>
   );
 }

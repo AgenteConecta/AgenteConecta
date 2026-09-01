@@ -1,14 +1,41 @@
 create extension if not exists "pgcrypto";
 
-create type lead_type as enum ('learner', 'professional', 'business', 'unknown');
-create type market_awareness as enum ('unaware', 'problem_aware', 'automation_aware', 'solution_aware', 'professional_integrator', 'competing_solution_user');
-create type geography_tier as enum ('tier_1', 'tier_2', 'tier_3');
-create type channel_owner as enum ('browser', 'meta_api', 'whatsapp', 'human', 'none');
-create type job_status as enum ('queued', 'running', 'completed', 'dead', 'cancelled');
-create type claim_status as enum ('pending', 'verified', 'blocked', 'expired');
-create type cnpj_status as enum ('unknown', 'not_provided', 'pending', 'verified', 'invalid');
+do $$ begin
+  create type lead_type as enum ('learner', 'professional', 'business', 'unknown');
+exception when duplicate_object then null;
+end $$;
 
-create table leads (
+do $$ begin
+  create type market_awareness as enum ('unaware', 'problem_aware', 'automation_aware', 'solution_aware', 'professional_integrator', 'competing_solution_user');
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create type geography_tier as enum ('tier_1', 'tier_2', 'tier_3');
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create type channel_owner as enum ('browser', 'meta_api', 'whatsapp', 'human', 'none');
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create type job_status as enum ('queued', 'running', 'completed', 'dead', 'cancelled');
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create type claim_status as enum ('pending', 'verified', 'blocked', 'expired');
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create type cnpj_status as enum ('unknown', 'not_provided', 'pending', 'verified', 'invalid');
+exception when duplicate_object then null;
+end $$;
+
+create table if not exists leads (
   id uuid primary key default gen_random_uuid(),
   instagram_username text unique,
   instagram_id text unique,
@@ -42,12 +69,12 @@ create table leads (
   updated_at timestamptz default now()
 );
 
-create unique index leads_phone_unique on leads (phone) where phone is not null;
-create unique index leads_email_unique on leads (lower(email)) where email is not null;
-create unique index leads_website_unique on leads (lower(website)) where website is not null;
-create unique index leads_company_unique on leads (lower(company_name)) where company_name is not null;
+create unique index if not exists leads_phone_unique on leads (phone) where phone is not null;
+create unique index if not exists leads_email_unique on leads (lower(email)) where email is not null;
+create unique index if not exists leads_website_unique on leads (lower(website)) where website is not null;
+create unique index if not exists leads_company_unique on leads (lower(company_name)) where company_name is not null;
 
-create table lead_profiles (
+create table if not exists lead_profiles (
   id uuid primary key default gen_random_uuid(),
   lead_id uuid not null references leads(id) on delete cascade,
   public_snapshot jsonb not null default '{}'::jsonb,
@@ -56,7 +83,7 @@ create table lead_profiles (
   created_at timestamptz default now()
 );
 
-create table lead_scores (
+create table if not exists lead_scores (
   id uuid primary key default gen_random_uuid(),
   lead_id uuid not null references leads(id) on delete cascade,
   raw_lead_score integer not null,
@@ -67,7 +94,7 @@ create table lead_scores (
   created_at timestamptz default now()
 );
 
-create table lead_events (
+create table if not exists lead_events (
   id uuid primary key default gen_random_uuid(),
   lead_id uuid references leads(id) on delete cascade,
   event_type text not null,
@@ -76,7 +103,7 @@ create table lead_events (
   created_at timestamptz default now()
 );
 
-create table conversations (
+create table if not exists conversations (
   id uuid primary key default gen_random_uuid(),
   lead_id uuid not null references leads(id) on delete cascade,
   channel channel_owner not null,
@@ -87,7 +114,7 @@ create table conversations (
   unique (channel, external_conversation_id)
 );
 
-create table messages (
+create table if not exists messages (
   id uuid primary key default gen_random_uuid(),
   conversation_id uuid not null references conversations(id) on delete cascade,
   lead_id uuid not null references leads(id) on delete cascade,
@@ -106,7 +133,7 @@ create table messages (
   unique (channel, provider_message_id)
 );
 
-create table campaigns (
+create table if not exists campaigns (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   objective text not null,
@@ -114,14 +141,14 @@ create table campaigns (
   created_at timestamptz default now()
 );
 
-create table campaign_leads (
+create table if not exists campaign_leads (
   campaign_id uuid references campaigns(id) on delete cascade,
   lead_id uuid references leads(id) on delete cascade,
   assigned_at timestamptz default now(),
   primary key (campaign_id, lead_id)
 );
 
-create table experiments (
+create table if not exists experiments (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   variable text not null,
@@ -130,7 +157,7 @@ create table experiments (
   created_at timestamptz default now()
 );
 
-create table experiment_assignments (
+create table if not exists experiment_assignments (
   id uuid primary key default gen_random_uuid(),
   experiment_id uuid not null references experiments(id) on delete cascade,
   lead_id uuid not null references leads(id) on delete cascade,
@@ -139,7 +166,7 @@ create table experiment_assignments (
   unique (experiment_id, lead_id)
 );
 
-create table claims (
+create table if not exists claims (
   id uuid primary key default gen_random_uuid(),
   claim text not null,
   claim_type text not null,
@@ -152,7 +179,7 @@ create table claims (
   updated_at timestamptz default now()
 );
 
-create table jobs (
+create table if not exists jobs (
   id uuid primary key default gen_random_uuid(),
   type text not null,
   payload jsonb not null default '{}'::jsonb,
@@ -168,7 +195,7 @@ create table jobs (
   updated_at timestamptz default now()
 );
 
-create table job_attempts (
+create table if not exists job_attempts (
   id uuid primary key default gen_random_uuid(),
   job_id uuid not null references jobs(id) on delete cascade,
   attempt_number integer not null,
@@ -178,7 +205,7 @@ create table job_attempts (
   finished_at timestamptz
 );
 
-create table ai_calls (
+create table if not exists ai_calls (
   id uuid primary key default gen_random_uuid(),
   lead_id uuid references leads(id) on delete set null,
   model text not null,
@@ -189,7 +216,7 @@ create table ai_calls (
   created_at timestamptz default now()
 );
 
-create table channel_locks (
+create table if not exists channel_locks (
   lead_id uuid primary key references leads(id) on delete cascade,
   owner channel_owner not null,
   locked_until timestamptz,
@@ -197,14 +224,14 @@ create table channel_locks (
   updated_at timestamptz default now()
 );
 
-create table do_not_contact (
+create table if not exists do_not_contact (
   lead_id uuid primary key references leads(id) on delete cascade,
   reason text not null,
   source_message_id uuid references messages(id) on delete set null,
   created_at timestamptz default now()
 );
 
-create table offers (
+create table if not exists offers (
   id uuid primary key default gen_random_uuid(),
   code text unique not null,
   name text not null,
@@ -215,7 +242,7 @@ create table offers (
   updated_at timestamptz default now()
 );
 
-create table orders (
+create table if not exists orders (
   id uuid primary key default gen_random_uuid(),
   lead_id uuid not null references leads(id) on delete cascade,
   offer_id uuid references offers(id),
@@ -226,7 +253,7 @@ create table orders (
   unique (checkout_id)
 );
 
-create table credentialing (
+create table if not exists credentialing (
   lead_id uuid primary key references leads(id) on delete cascade,
   training_completed boolean default false,
   certification_status text default 'pending',
@@ -240,7 +267,7 @@ create table credentialing (
   updated_at timestamptz default now()
 );
 
-create table certifications (
+create table if not exists certifications (
   id uuid primary key default gen_random_uuid(),
   lead_id uuid not null references leads(id) on delete cascade,
   score numeric(5, 2),
@@ -249,7 +276,7 @@ create table certifications (
   created_at timestamptz default now()
 );
 
-create table territories (
+create table if not exists territories (
   id uuid primary key default gen_random_uuid(),
   state text unique not null,
   tier geography_tier not null,
@@ -258,13 +285,13 @@ create table territories (
   updated_at timestamptz default now()
 );
 
-create table settings (
+create table if not exists settings (
   key text primary key,
   value jsonb not null,
   updated_at timestamptz default now()
 );
 
-create table audit_logs (
+create table if not exists audit_logs (
   id uuid primary key default gen_random_uuid(),
   actor text not null,
   action text not null,

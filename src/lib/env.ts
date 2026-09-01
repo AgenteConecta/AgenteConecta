@@ -19,3 +19,7 @@ export const env = {
 export function integrationReady(...values: Array<string | undefined>): boolean {
   return values.every((value) => typeof value === "string" && value.trim().length > 0);
 }
+
+export function normalizeSupabaseUrl(url: string): string {
+  return url.replace(/\/rest\/v1\/?$/, "").replace(/\/$/, "");
+}

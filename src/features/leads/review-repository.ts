@@ -45,6 +45,7 @@ export async function approveLeadForOutreach(formData: FormData) {
   const leadId = String(formData.get("leadId") ?? "");
   const lane = String(formData.get("lane") ?? "review");
   const username = String(formData.get("username") ?? "");
+  const approvedMessage = String(formData.get("approvedMessage") ?? "").trim();
 
   if (!leadId) {
     throw new Error("Lead ID is required");
@@ -76,6 +77,7 @@ export async function approveLeadForOutreach(formData: FormData) {
     payload: {
       lane,
       approvedBy: "operator",
+      approvedMessage,
     },
   });
 

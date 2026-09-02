@@ -13,7 +13,7 @@ import {
   UserRoundSearch,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { generateFirstContactMessage } from "@/features/conversations/first-contact";
+import { generateFirstContactVariants } from "@/features/conversations/first-contact";
 import { approveLeadForOutreach, listLeadsForReview, updateLeadReviewState } from "@/features/leads/review-repository";
 import { identifyProspectingLane, prospectingLaneLabel, type ProspectingLane } from "@/features/prospecting/prospecting-lane";
 import { scoreLead } from "@/features/scoring/scoring";
@@ -105,6 +105,36 @@ function ReviewAction({
   );
 }
 
+function ApprovalMessageForm({
+  lead,
+  lane,
+  message,
+}: {
+  lead: LeadRow;
+  lane: ProspectingLane;
+  message: string;
+}) {
+  return (
+    <form action={approveLeadForOutreach} className="space-y-3">
+      <input name="leadId" type="hidden" value={lead.id} />
+      <input name="lane" type="hidden" value={lane} />
+      <input name="username" type="hidden" value={`@${lead.instagram_username ?? ""}`} />
+      <label className="block">
+        <span className="mb-2 block text-xs font-semibold uppercase text-ink/45">Mensagem para aprovar</span>
+        <textarea
+          className="min-h-40 w-full resize-y rounded-md border border-black/10 bg-white px-3 py-3 text-sm leading-6 outline-none focus:border-pine"
+          defaultValue={message}
+          name="approvedMessage"
+        />
+      </label>
+      <button className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-pine px-3 text-sm font-medium text-white">
+        <CheckCircle2 className="h-4 w-4" />
+        Aprovar abordagem editada
+      </button>
+    </form>
+  );
+}
+
 export default async function LeadsPage({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
   const leads = await listLeadsForReview({
@@ -121,6 +151,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
     .filter((row) => !params.lane || params.lane === "all" || row.lane === params.lane);
 
   const selected = rows.find((row) => row.lead.id === params.selected) ?? rows[0] ?? null;
+  const selectedApproaches = selected ? generateFirstContactVariants(selected.input, scoreLead(selected.input)) : [];
   const counts = rows.reduce(
     (acc, row) => {
       acc[row.lane] += 1;
@@ -271,16 +302,19 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
               </div>
 
               <div className="rounded-lg border border-black/10 bg-white">
-                <div className="border-b border-black/10 px-4 py-3 font-semibold">Abordagem sugerida</div>
-                <p className="px-4 py-3 text-sm leading-6 text-ink/75">
-                  {selected.lane === "partnership"
-                    ? `Olá, ${selected.input.displayName.split(" ")[0]}. Vi que você produz conteúdo ou atua como referência em automação. Faz sentido conversarmos sobre conhecer a solução Newtek para uma possível parceria ou divulgação?`
-                    : generateFirstContactMessage(selected.input, scoreLead(selected.input))}
-                </p>
+                <div className="border-b border-black/10 px-4 py-3 font-semibold">Abordagens para parceria</div>
+                <div className="space-y-3 px-4 py-3">
+                  {selectedApproaches.map((approach, index) => (
+                    <div className="rounded-md bg-[#f7f8f5] p-3 text-sm leading-6 text-ink/75" key={approach}>
+                      <div className="mb-1 text-xs font-semibold uppercase text-ink/45">Exemplo {index + 1}</div>
+                      {approach}
+                    </div>
+                  ))}
+                  <ApprovalMessageForm lead={selected.lead} lane={selected.lane} message={selectedApproaches[0] ?? ""} />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
-                <ReviewAction action="approve" icon={CheckCircle2} label="Aprovar" lane={selected.lane} lead={selected.lead} tone="bg-pine text-white" />
                 <ReviewAction action="partnership" icon={Handshake} label="Parceria" lane={selected.lane} lead={selected.lead} tone="bg-sky text-white" />
                 <ReviewAction action="nurture" icon={Clock3} label="Nutrir" lane={selected.lane} lead={selected.lead} tone="bg-[#f1f2ee] text-ink" />
                 <ReviewAction action="reject" icon={Trash2} label="Descartar" lane={selected.lane} lead={selected.lead} tone="bg-[#f1f2ee] text-ink" />

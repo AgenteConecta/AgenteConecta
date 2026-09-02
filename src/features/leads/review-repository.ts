@@ -1,4 +1,5 @@
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { getSupabaseAdminClient } from "@/integrations/supabase/client";
 import type { DashboardLead } from "@/features/analytics/dashboard-data";
 
@@ -46,6 +47,7 @@ export async function approveLeadForOutreach(formData: FormData) {
   const lane = String(formData.get("lane") ?? "review");
   const username = String(formData.get("username") ?? "");
   const approvedMessage = String(formData.get("approvedMessage") ?? "").trim();
+  const returnTo = getSafeReturnPath(formData);
 
   if (!leadId) {
     throw new Error("Lead ID is required");
@@ -87,6 +89,7 @@ export async function approveLeadForOutreach(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/leads");
+  redirectWithNotice(returnTo, "Abordagem aprovada e registrada no CRM.");
 }
 
 export async function updateLeadReviewState(formData: FormData) {
@@ -96,6 +99,7 @@ export async function updateLeadReviewState(formData: FormData) {
   const username = String(formData.get("username") ?? "");
   const action = String(formData.get("action") ?? "");
   const lane = String(formData.get("lane") ?? "review");
+  const returnTo = getSafeReturnPath(formData);
 
   if (!leadId) {
     throw new Error("Lead ID is required");
@@ -156,4 +160,27 @@ export async function updateLeadReviewState(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/leads");
+  redirectWithNotice(returnTo, actionNotice(action));
+}
+
+function getSafeReturnPath(formData: FormData) {
+  const returnTo = String(formData.get("returnTo") ?? "/leads");
+
+  return returnTo.startsWith("/leads") ? returnTo : "/leads";
+}
+
+function redirectWithNotice(returnTo: string, notice: string): never {
+  const separator = returnTo.includes("?") ? "&" : "?";
+  redirect(`${returnTo}${separator}notice=${encodeURIComponent(notice)}`);
+}
+
+function actionNotice(action: string) {
+  const notices: Record<string, string> = {
+    partnership: "Lead marcado para parceria/divulgação.",
+    nurture: "Lead marcado para nutrir depois.",
+    reject: "Lead descartado.",
+    do_not_contact: "Lead bloqueado como não contatar.",
+  };
+
+  return notices[action] ?? "Decisão registrada no CRM.";
 }

@@ -23,6 +23,7 @@ type SearchParams = Promise<{
   minScore?: string;
   lane?: string;
   selected?: string;
+  notice?: string;
 }>;
 
 type LeadRow = Awaited<ReturnType<typeof listLeadsForReview>>[number];
@@ -83,6 +84,7 @@ function ReviewAction({
   label,
   icon: Icon,
   tone,
+  returnTo,
 }: {
   lead: LeadRow;
   lane: ProspectingLane;
@@ -90,6 +92,7 @@ function ReviewAction({
   label: string;
   icon: typeof CheckCircle2;
   tone: string;
+  returnTo: string;
 }) {
   return (
     <form action={action === "approve" ? approveLeadForOutreach : updateLeadReviewState}>
@@ -97,7 +100,8 @@ function ReviewAction({
       <input name="lane" type="hidden" value={lane} />
       <input name="username" type="hidden" value={`@${lead.instagram_username ?? ""}`} />
       <input name="action" type="hidden" value={action} />
-      <button className={`inline-flex h-9 w-full items-center justify-center gap-2 rounded-md px-3 text-sm font-medium ${tone}`}>
+      <input name="returnTo" type="hidden" value={returnTo} />
+      <button className={`inline-flex h-9 w-full items-center justify-center gap-2 rounded-md px-3 text-sm font-medium transition hover:brightness-95 active:scale-[0.99] ${tone}`}>
         <Icon className="h-4 w-4" />
         {label}
       </button>
@@ -109,16 +113,19 @@ function ApprovalMessageForm({
   lead,
   lane,
   message,
+  returnTo,
 }: {
   lead: LeadRow;
   lane: ProspectingLane;
   message: string;
+  returnTo: string;
 }) {
   return (
     <form action={approveLeadForOutreach} className="space-y-3">
       <input name="leadId" type="hidden" value={lead.id} />
       <input name="lane" type="hidden" value={lane} />
       <input name="username" type="hidden" value={`@${lead.instagram_username ?? ""}`} />
+      <input name="returnTo" type="hidden" value={returnTo} />
       <label className="block">
         <span className="mb-2 block text-xs font-semibold uppercase text-ink/45">Mensagem para aprovar</span>
         <textarea
@@ -127,7 +134,7 @@ function ApprovalMessageForm({
           name="approvedMessage"
         />
       </label>
-      <button className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-pine px-3 text-sm font-medium text-white">
+      <button className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-pine px-3 text-sm font-medium text-white transition hover:brightness-95 active:scale-[0.99]">
         <CheckCircle2 className="h-4 w-4" />
         Aprovar abordagem editada
       </button>
@@ -152,6 +159,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
 
   const selected = rows.find((row) => row.lead.id === params.selected) ?? rows[0] ?? null;
   const selectedApproaches = selected ? generateFirstContactVariants(selected.input, scoreLead(selected.input)) : [];
+  const returnTo = `/leads?q=${params.q ?? ""}&minScore=${params.minScore ?? ""}&lane=${params.lane ?? "all"}${selected ? `&selected=${selected.lead.id}` : ""}`;
   const counts = rows.reduce(
     (acc, row) => {
       acc[row.lane] += 1;
@@ -177,6 +185,11 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
             ))}
           </div>
         </div>
+        {params.notice ? (
+          <div className="mt-4 rounded-md border border-pine/20 bg-mint px-4 py-3 text-sm font-medium text-pine">
+            {params.notice}
+          </div>
+        ) : null}
       </header>
 
       <div className="grid min-h-[calc(100vh-89px)] grid-cols-1 xl:grid-cols-[minmax(680px,1fr)_420px]">
@@ -310,16 +323,16 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
                       {approach}
                     </div>
                   ))}
-                  <ApprovalMessageForm lead={selected.lead} lane={selected.lane} message={selectedApproaches[0] ?? ""} />
+                  <ApprovalMessageForm lead={selected.lead} lane={selected.lane} message={selectedApproaches[0] ?? ""} returnTo={returnTo} />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
-                <ReviewAction action="partnership" icon={Handshake} label="Parceria" lane={selected.lane} lead={selected.lead} tone="bg-sky text-white" />
-                <ReviewAction action="nurture" icon={Clock3} label="Nutrir" lane={selected.lane} lead={selected.lead} tone="bg-[#f1f2ee] text-ink" />
-                <ReviewAction action="reject" icon={Trash2} label="Descartar" lane={selected.lane} lead={selected.lead} tone="bg-[#f1f2ee] text-ink" />
+                <ReviewAction action="partnership" icon={Handshake} label="Parceria" lane={selected.lane} lead={selected.lead} returnTo={returnTo} tone="bg-sky text-white" />
+                <ReviewAction action="nurture" icon={Clock3} label="Nutrir" lane={selected.lane} lead={selected.lead} returnTo={returnTo} tone="bg-[#f1f2ee] text-ink" />
+                <ReviewAction action="reject" icon={Trash2} label="Descartar" lane={selected.lane} lead={selected.lead} returnTo={returnTo} tone="bg-[#f1f2ee] text-ink" />
                 <div className="col-span-2">
-                  <ReviewAction action="do_not_contact" icon={Ban} label="Não contatar" lane={selected.lane} lead={selected.lead} tone="bg-coral text-white" />
+                  <ReviewAction action="do_not_contact" icon={Ban} label="Não contatar" lane={selected.lane} lead={selected.lead} returnTo={returnTo} tone="bg-coral text-white" />
                 </div>
               </div>
 

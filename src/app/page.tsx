@@ -26,6 +26,7 @@ import { AppShell } from "@/components/app-shell";
 import { prospectingAudiences } from "@/features/prospecting/audiences";
 import { ProspectingLauncher } from "@/components/prospecting-launcher";
 import { queueProspectingRun } from "@/features/prospecting/prospecting-actions";
+import { getApprovedOutreachCount, processApprovedOutreach } from "@/features/outreach/outreach-actions";
 
 type SearchParams = Promise<{
   notice?: string;
@@ -126,6 +127,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
   const params = await searchParams;
   const business = loadBusinessConfig();
   const dashboard = await getDashboardData();
+  const approvedOutreachCount = await getApprovedOutreachCount();
   const hotLead = dashboard.hotLead;
   const hotLeadInput = hotLead
     ? {
@@ -203,6 +205,46 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
 
         <div className="space-y-6 px-5 py-6 md:px-8">
           <ProspectingLauncher action={queueProspectingRun} audiences={prospectingAudiences} />
+
+          <section className="grid gap-4 rounded-lg border border-black/10 bg-white p-5 shadow-panel lg:grid-cols-[1fr_360px]">
+            <div>
+              <div className="flex items-center gap-2 text-sm font-medium text-pine">
+                <Send className="h-4 w-4" />
+                Contatos aprovados
+              </div>
+              <h2 className="mt-2 text-xl font-semibold">Processar abordagens aprovadas</h2>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-ink/65">
+                Pega as mensagens aprovadas em Leads, respeita bloqueios de contato e registra o resultado no pipeline. Em dry-run, valida tudo sem enviar DM.
+              </p>
+              <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                <div className="rounded-md bg-[#f7f8f5] px-3 py-2">
+                  <div className="text-xs text-ink/55">Na fila</div>
+                  <div className="text-2xl font-semibold">{approvedOutreachCount}</div>
+                </div>
+                <div className="rounded-md bg-[#f7f8f5] px-3 py-2">
+                  <div className="text-xs text-ink/55">Modo</div>
+                  <div className="text-sm font-semibold">{env.appMode}</div>
+                </div>
+                <div className="rounded-md bg-[#f7f8f5] px-3 py-2">
+                  <div className="text-xs text-ink/55">Envio real</div>
+                  <div className="text-sm font-semibold">{env.appMode === "dry_run" || env.appMode === "simulation" ? "bloqueado" : "confirmação"}</div>
+                </div>
+              </div>
+            </div>
+            <form action={processApprovedOutreach} className="grid content-start gap-3">
+              <label className="grid gap-2">
+                <span className="text-xs font-semibold uppercase text-ink/45">Processar até</span>
+                <input className="h-10 rounded-md border border-black/10 bg-white px-3 text-sm" defaultValue={5} min={1} max={10} name="maxMessages" type="number" />
+              </label>
+              <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-pine px-4 text-sm font-medium text-white transition hover:brightness-95 active:scale-[0.99]">
+                <Send className="h-4 w-4" />
+                Enviar contatos aprovados
+              </button>
+              <a className="inline-flex h-10 items-center justify-center rounded-md border border-black/10 px-4 text-sm font-medium text-ink/70" href="/leads">
+                Revisar leads
+              </a>
+            </form>
+          </section>
 
           <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {metrics.map(([title, value, Icon, tone]) => (

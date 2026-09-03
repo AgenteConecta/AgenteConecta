@@ -170,13 +170,37 @@ export function ProspectingLauncher({ action, audiences }: ProspectingLauncherPr
           <span className="text-xs font-semibold uppercase text-ink/45">Perfis por busca</span>
           <input className="h-10 rounded-md border border-black/10 bg-white px-3 text-sm" defaultValue={5} min={1} max={10} name="maxProfiles" type="number" />
         </label>
+        <div className="grid gap-3 rounded-md border border-black/10 bg-[#f7f8f5] p-3">
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input className="h-4 w-4 accent-pine" defaultChecked name="autoContact" type="checkbox" />
+            Contatar automaticamente após qualificar
+          </label>
+          <div className="grid gap-2 sm:grid-cols-3">
+            <label className="grid gap-2">
+              <span className="text-xs font-semibold uppercase text-ink/45">Score mínimo</span>
+              <input className="h-10 rounded-md border border-black/10 bg-white px-3 text-sm" defaultValue={70} min={0} max={100} name="minScore" type="number" />
+            </label>
+            <label className="grid gap-2">
+              <span className="text-xs font-semibold uppercase text-ink/45">Seguidores mínimos</span>
+              <input className="h-10 rounded-md border border-black/10 bg-white px-3 text-sm" defaultValue={10000} min={0} max={10000000} name="minFollowers" type="number" />
+            </label>
+            <label className="grid gap-2">
+              <span className="text-xs font-semibold uppercase text-ink/45">Lote</span>
+              <select className="h-10 rounded-md border border-black/10 bg-white px-3 text-sm" defaultValue={5} name="batchSize">
+                <option value={5}>5 leads</option>
+                <option value={10}>10 leads</option>
+                <option value={15}>15 leads</option>
+              </select>
+            </label>
+          </div>
+        </div>
         <label className="flex items-center gap-2 rounded-md border border-black/10 bg-[#f7f8f5] px-3 py-2 text-sm">
           <input className="h-4 w-4 accent-pine" defaultChecked name="runNow" type="checkbox" />
           Executar agora no Chrome conectado
         </label>
         <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-pine px-4 text-sm font-medium text-white transition hover:brightness-95 active:scale-[0.99]">
           <Search className="h-4 w-4" />
-          Enfileirar prospecção
+          Pesquisar, qualificar e processar lote
         </button>
         <div className="rounded-md bg-[#f7f8f5] px-3 py-2 text-xs leading-5 text-ink/60">
           Em dry-run, o sistema pesquisa e registra leads para revisão. Nenhuma DM é enviada.

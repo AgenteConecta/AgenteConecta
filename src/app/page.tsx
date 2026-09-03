@@ -11,6 +11,7 @@ import {
   Lock,
   MessageCircle,
   PauseCircle,
+  Play,
   Search,
   Send,
   Settings,
@@ -27,6 +28,7 @@ import { prospectingAudiences } from "@/features/prospecting/audiences";
 import { ProspectingLauncher } from "@/components/prospecting-launcher";
 import { queueProspectingRun } from "@/features/prospecting/prospecting-actions";
 import { getApprovedOutreachCount, getAutomaticOutreachCandidateCount, processApprovedOutreach, processAutomaticQualifiedOutreach } from "@/features/outreach/outreach-actions";
+import { getOperationalPause, resumeAllWork, suspendAllWork } from "@/features/safety/operation-pause";
 
 type SearchParams = Promise<{
   notice?: string;
@@ -129,6 +131,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
   const dashboard = await getDashboardData();
   const approvedOutreachCount = await getApprovedOutreachCount();
   const automaticCandidateCount = await getAutomaticOutreachCandidateCount();
+  const pause = await getOperationalPause();
   const hotLead = dashboard.hotLead;
   const hotLeadInput = hotLead
     ? {
@@ -187,9 +190,21 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
               <h1 className="text-2xl font-semibold tracking-normal md:text-3xl">Sistema Comercial Autônomo</h1>
             </div>
             <div className="flex flex-wrap gap-2">
-              <span className="inline-flex items-center gap-2 rounded-md border border-coral/30 bg-white px-3 py-2 text-sm font-medium text-coral">
+              <form action={suspendAllWork}>
+                <button className="inline-flex items-center gap-2 rounded-md border border-coral/30 bg-white px-3 py-2 text-sm font-medium text-coral transition hover:bg-coral hover:text-white">
+                  <PauseCircle className="h-4 w-4" />
+                  Suspender agora
+                </button>
+              </form>
+              <form action={resumeAllWork}>
+                <button className="inline-flex items-center gap-2 rounded-md border border-black/10 bg-white px-3 py-2 text-sm font-medium text-ink/70 transition hover:bg-mint hover:text-pine">
+                  <Play className="h-4 w-4" />
+                  Retomar
+                </button>
+              </form>
+              <span className={`inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium ${pause.paused ? "bg-coral text-white" : "border border-pine/20 bg-mint text-pine"}`}>
                 <PauseCircle className="h-4 w-4" />
-                Pausa geral: {env.masterPause ? "ativa" : "inativa"}
+                Pausa geral: {pause.paused ? "ativa" : "inativa"}
               </span>
               <span className="inline-flex items-center gap-2 rounded-md bg-pine px-3 py-2 text-sm font-medium text-white">
                 <ShieldCheck className="h-4 w-4" />
@@ -267,8 +282,8 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
                   <div className="text-sm font-semibold">{env.appMode === "dry_run" || env.appMode === "simulation" ? "bloqueado" : "confirmação"}</div>
                 </div>
                 <div className="rounded-md bg-[#f7f8f5] px-3 py-2">
-                  <div className="text-xs text-ink/55">Trava por execução</div>
-                  <div className="text-sm font-semibold">máx. 10 por execução</div>
+                  <div className="text-xs text-ink/55">Lotes disponíveis</div>
+                  <div className="text-sm font-semibold">5, 10 ou 15 leads</div>
                 </div>
               </div>
             </div>
@@ -282,8 +297,12 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
                 <input className="h-10 rounded-md border border-black/10 bg-white px-3 text-sm" defaultValue={10000} min={0} max={10000000} name="minFollowers" type="number" />
               </label>
               <label className="grid gap-2">
-                <span className="text-xs font-semibold uppercase text-ink/45">Processar até</span>
-                <input className="h-10 rounded-md border border-black/10 bg-white px-3 text-sm" defaultValue={3} min={1} max={10} name="maxMessages" type="number" />
+                <span className="text-xs font-semibold uppercase text-ink/45">Lote</span>
+                <select className="h-10 rounded-md border border-black/10 bg-white px-3 text-sm" defaultValue={5} name="batchSize">
+                  <option value={5}>5 leads</option>
+                  <option value={10}>10 leads</option>
+                  <option value={15}>15 leads</option>
+                </select>
               </label>
               <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-ink px-4 text-sm font-medium text-white transition hover:brightness-95 active:scale-[0.99]">
                 <Bot className="h-4 w-4" />

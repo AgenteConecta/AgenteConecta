@@ -6,6 +6,7 @@ import { generateFirstContactMessage } from "@/features/conversations/first-cont
 import { sendInitialInstagramDm } from "@/integrations/instagram/browser-worker";
 import { getSupabaseAdminClient } from "@/integrations/supabase/client";
 import { env } from "@/lib/env";
+import { isOperationallyPaused } from "@/features/safety/operation-pause";
 import type { LeadProfileInput, LeadScoreResult } from "@/lib/types";
 
 type PendingOutreachMessage = {
@@ -85,9 +86,9 @@ export async function getAutomaticOutreachCandidateCount() {
 
 export async function processApprovedOutreach(formData: FormData) {
   const maxMessagesRaw = Number(formData.get("maxMessages") ?? 5);
-  const maxMessages = Math.max(1, Math.min(Number.isFinite(maxMessagesRaw) ? maxMessagesRaw : 5, 10));
+  const maxMessages = normalizeBatchSize(maxMessagesRaw);
 
-  if (env.masterPause) {
+  if (await isOperationallyPaused()) {
     redirectWithNotice("Pausa geral ativa. Nenhum contato foi processado.");
   }
 
@@ -116,6 +117,10 @@ export async function processApprovedOutreach(formData: FormData) {
   let failed = 0;
 
   for (const message of ((data ?? []) as PendingOutreachMessage[])) {
+    if (await isOperationallyPaused()) {
+      break;
+    }
+
     const lead = Array.isArray(message.leads) ? message.leads[0] : message.leads;
     const username = lead?.instagram_username;
 
@@ -184,19 +189,45 @@ export async function processApprovedOutreach(formData: FormData) {
 export async function processAutomaticQualifiedOutreach(formData: FormData) {
   const minScoreRaw = Number(formData.get("minScore") ?? 70);
   const minFollowersRaw = Number(formData.get("minFollowers") ?? 10000);
-  const maxMessagesRaw = Number(formData.get("maxMessages") ?? 5);
+  const maxMessagesRaw = Number(formData.get("batchSize") ?? formData.get("maxMessages") ?? 5);
   const minScore = Math.max(0, Math.min(Number.isFinite(minScoreRaw) ? minScoreRaw : 70, 100));
   const minFollowers = Math.max(0, Math.min(Number.isFinite(minFollowersRaw) ? minFollowersRaw : 10000, 10_000_000));
-  const maxMessages = Math.max(1, Math.min(Number.isFinite(maxMessagesRaw) ? maxMessagesRaw : 5, 10));
+  const maxMessages = normalizeBatchSize(maxMessagesRaw);
 
-  if (env.masterPause) {
+  if (await isOperationallyPaused()) {
     redirectWithNotice("Pausa geral ativa. Nenhum contato automático foi processado.");
   }
 
+  const result = await runAutomaticQualifiedOutreach({
+    minScore,
+    minFollowers,
+    maxMessages,
+  });
+
+  revalidatePath("/");
+  revalidatePath("/leads");
+  redirectWithNotice(
+    `Contato automático: ${result.prepared} mensagens criadas, ${result.processed} processadas, ${result.failed} falhas. Critério: score ${minScore}+ ou ${minFollowers}+ seguidores.`,
+  );
+}
+
+export async function runAutomaticQualifiedOutreach({
+  minScore,
+  minFollowers,
+  maxMessages,
+}: {
+  minScore: number;
+  minFollowers: number;
+  maxMessages: number;
+}) {
   const supabase = getSupabaseAdminClient();
 
   if (!supabase) {
-    redirectWithNotice("Supabase não está configurado. Nenhum contato automático foi processado.");
+    return {
+      prepared: 0,
+      processed: 0,
+      failed: 1,
+    };
   }
 
   const { data: leads, error } = await supabase
@@ -209,7 +240,11 @@ export async function processAutomaticQualifiedOutreach(formData: FormData) {
     .limit(200);
 
   if (error) {
-    redirectWithNotice(`Erro ao buscar leads qualificados: ${error.message}`);
+    return {
+      prepared: 0,
+      processed: 0,
+      failed: 1,
+    };
   }
 
   const rows = (leads ?? []) as QualifiedLeadRow[];
@@ -233,6 +268,10 @@ export async function processAutomaticQualifiedOutreach(formData: FormData) {
   let failed = 0;
 
   for (const candidate of candidates) {
+    if (await isOperationallyPaused()) {
+      break;
+    }
+
     try {
       const messageId = await createAutomaticOutreachMessage(candidate.lead, candidate.followers, minScore, minFollowers);
       prepared += 1;
@@ -258,11 +297,11 @@ export async function processAutomaticQualifiedOutreach(formData: FormData) {
     }
   }
 
-  revalidatePath("/");
-  revalidatePath("/leads");
-  redirectWithNotice(
-    `Contato automático: ${prepared} mensagens criadas, ${processed} processadas, ${failed} falhas. Critério: score ${minScore}+ ou ${minFollowers}+ seguidores.`,
-  );
+  return {
+    prepared,
+    processed,
+    failed,
+  };
 }
 
 async function markMessageResult(messageId: string, leadId: string, result: string, summary: string) {
@@ -465,6 +504,17 @@ function toLeadScore(lead: QualifiedLeadRow): LeadScoreResult {
     scoreExplanation: [],
     commercialExplanation: [],
   };
+}
+
+function normalizeBatchSize(value: number) {
+  if (value >= 15) {
+    return 15;
+  }
+  if (value >= 10) {
+    return 10;
+  }
+
+  return 5;
 }
 
 function redirectWithNotice(notice: string): never {

@@ -9,6 +9,8 @@ import { generateFirstContactMessage } from "@/features/conversations/first-cont
 import { persistDiscoveredLead } from "@/features/leads/lead-repository";
 import { hasMinimumIcpSignal } from "@/features/prospecting/icp-filter";
 import { discoverProfilesFromHashtag, readInstagramPublicProfile } from "@/integrations/instagram/browser-worker";
+import { runAutomaticQualifiedOutreach } from "@/features/outreach/outreach-actions";
+import { isOperationallyPaused } from "@/features/safety/operation-pause";
 
 export async function queueProspectingRun(formData: FormData) {
   const audience = getProspectingAudience(String(formData.get("audience") ?? "auto"));
@@ -19,8 +21,15 @@ export async function queueProspectingRun(formData: FormData) {
   const maxProfilesPerKeyword = Math.max(1, Math.min(Number.isFinite(maxProfilesRaw) ? maxProfilesRaw : 5, 10));
   const keywords = (customKeywords.length > 0 ? customKeywords : audience.keywords).slice(0, 5);
   const runNow = formData.get("runNow") === "on";
+  const autoContact = formData.get("autoContact") === "on";
+  const minScoreRaw = Number(formData.get("minScore") ?? 70);
+  const minFollowersRaw = Number(formData.get("minFollowers") ?? 10000);
+  const batchSizeRaw = Number(formData.get("batchSize") ?? 5);
+  const minScore = Math.max(0, Math.min(Number.isFinite(minScoreRaw) ? minScoreRaw : 70, 100));
+  const minFollowers = Math.max(0, Math.min(Number.isFinite(minFollowersRaw) ? minFollowersRaw : 10000, 10_000_000));
+  const batchSize = normalizeBatchSize(batchSizeRaw);
 
-  if (env.masterPause) {
+  if (await isOperationallyPaused()) {
     redirectWithNotice("Master pause ativo. Desative a pausa antes de iniciar uma nova prospecção.");
   }
 
@@ -42,6 +51,10 @@ export async function queueProspectingRun(formData: FormData) {
         audienceLabel,
         keywords,
         maxProfilesPerKeyword,
+        autoContact,
+        minScore,
+        minFollowers,
+        batchSize,
         source: "dashboard",
         dryRun: env.appMode === "dry_run",
       },
@@ -55,11 +68,19 @@ export async function queueProspectingRun(formData: FormData) {
 
   if (runNow) {
     const summary = await runProspectingKeywords(keywords, maxProfilesPerKeyword);
+    const outreachSummary = autoContact
+      ? await runAutomaticQualifiedOutreach({
+          minScore,
+          minFollowers,
+          maxMessages: batchSize,
+        })
+      : { prepared: 0, processed: 0, failed: 0 };
+
     await supabase
       .from("jobs")
       .update({
-        status: summary.errors > 0 && summary.persisted === 0 ? "dead" : "completed",
-        last_error: summary.errorMessage,
+        status: summary.paused ? "cancelled" : summary.errors > 0 && summary.persisted === 0 ? "dead" : "completed",
+        last_error: summary.paused ? "Suspenso pela pausa operacional" : summary.errorMessage,
         updated_at: new Date().toISOString(),
       })
       .eq("id", job.id);
@@ -67,7 +88,7 @@ export async function queueProspectingRun(formData: FormData) {
     revalidatePath("/");
     revalidatePath("/leads");
     redirectWithNotice(
-      `Prospecção concluída: ${summary.persisted} novos, ${summary.duplicates} duplicados, ${summary.filteredOut} filtrados, ${summary.errors} erros.`,
+      `Prospecção concluída: ${summary.persisted} novos, ${summary.duplicates} duplicados, ${summary.filteredOut} filtrados, ${summary.errors} erros. Contato automático: ${outreachSummary.prepared} criados, ${outreachSummary.processed} processados.`,
     );
   }
 
@@ -81,10 +102,16 @@ async function runProspectingKeywords(keywords: string[], maxProfilesPerKeyword:
     duplicates: 0,
     filteredOut: 0,
     errors: 0,
+    paused: false,
     errorMessage: null as string | null,
   };
 
   for (const keyword of keywords) {
+    if (await isOperationallyPaused()) {
+      summary.paused = true;
+      break;
+    }
+
     const discovered = await discoverProfilesFromHashtag({ keyword, maxProfiles: maxProfilesPerKeyword }).catch((error: unknown) => {
       summary.errors += 1;
       summary.errorMessage = error instanceof Error ? error.message : "Erro desconhecido ao pesquisar no Instagram.";
@@ -92,6 +119,11 @@ async function runProspectingKeywords(keywords: string[], maxProfilesPerKeyword:
     });
 
     for (const lead of discovered) {
+      if (await isOperationallyPaused()) {
+        summary.paused = true;
+        break;
+      }
+
       const enrichedLead = await readInstagramPublicProfile(lead.instagramUsername).then((profile) => ({
         ...lead,
         ...profile,
@@ -116,6 +148,17 @@ async function runProspectingKeywords(keywords: string[], maxProfilesPerKeyword:
   }
 
   return summary;
+}
+
+function normalizeBatchSize(value: number) {
+  if (value >= 15) {
+    return 15;
+  }
+  if (value >= 10) {
+    return 10;
+  }
+
+  return 5;
 }
 
 function redirectWithNotice(notice: string): never {

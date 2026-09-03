@@ -97,6 +97,19 @@ export async function persistDiscoveredLead(input: LeadProfileInput): Promise<Pe
     commercial_explanation: score.commercialExplanation,
   });
 
+  await supabase.from("lead_profiles").insert({
+    lead_id: leadId,
+    public_snapshot: {
+      followers: input.followers ?? null,
+      category: input.category ?? null,
+      website: input.website ?? null,
+      discoverySource: input.discoverySource ?? null,
+      discoveryKeyword: input.discoveryKeyword ?? null,
+    },
+    posts: input.posts ?? [],
+    analyzed_at: new Date().toISOString(),
+  });
+
   await supabase.from("lead_events").insert({
     lead_id: leadId,
     event_type: "discovered_on_instagram",

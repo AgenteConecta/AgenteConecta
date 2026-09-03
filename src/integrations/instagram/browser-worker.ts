@@ -29,6 +29,31 @@ export function hashtagUrl(keyword: string): string {
   return `https://www.instagram.com/explore/tags/${tag}/`;
 }
 
+export function parseInstagramFollowerCount(input: string): number | undefined {
+  const match = input.match(/([\d.,]+)\s*([kKmM]?)\s*(?:followers|seguidores)/i);
+
+  if (!match) {
+    return undefined;
+  }
+
+  const suffix = match[2].toLowerCase();
+  const normalized = suffix ? match[1].replace(",", ".") : match[1].replace(/[.,]/g, "");
+  const value = Number(normalized);
+
+  if (!Number.isFinite(value)) {
+    return undefined;
+  }
+
+  if (suffix === "m") {
+    return Math.round(value * 1_000_000);
+  }
+  if (suffix === "k") {
+    return Math.round(value * 1_000);
+  }
+
+  return Math.round(value);
+}
+
 export async function checkInstagramSession(): Promise<{
   connected: boolean;
   loggedIn: boolean;
@@ -199,12 +224,14 @@ export async function readInstagramPublicProfile(username: string): Promise<Lead
     });
 
     const displayName = profile.title && profile.title !== "Instagram" ? profile.title : normalizedUsername;
+    const followers = parseInstagramFollowerCount([profile.description, profile.headerText].join(" "));
 
     return {
       instagramUsername: `@${normalizedUsername}`,
       displayName,
       bio: [profile.description, profile.headerText].filter(Boolean).join(" "),
       website: profile.website,
+      followers,
       country: "Brasil",
     };
   } finally {

@@ -1,4 +1,4 @@
-export type ProspectingAudienceId = "auto" | "architects" | "electricians" | "electrical_influencers" | "integrators" | "equipment";
+export type ProspectingAudienceId = "auto" | "architects" | "electricians" | "electrical_influencers" | "integrators" | "equipment" | string;
 
 export type ProspectingAudience = {
   id: ProspectingAudienceId;

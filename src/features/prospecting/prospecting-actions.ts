@@ -1,3 +1,5 @@
+"use server";
+
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSupabaseAdminClient } from "@/integrations/supabase/client";
@@ -9,9 +11,9 @@ import { hasMinimumIcpSignal } from "@/features/prospecting/icp-filter";
 import { discoverProfilesFromHashtag, readInstagramPublicProfile } from "@/integrations/instagram/browser-worker";
 
 export async function queueProspectingRun(formData: FormData) {
-  "use server";
-
   const audience = getProspectingAudience(String(formData.get("audience") ?? "auto"));
+  const audienceId = String(formData.get("audience") ?? audience.id);
+  const audienceLabel = String(formData.get("audienceLabel") ?? audience.label).trim() || audience.label;
   const customKeywords = parseCustomKeywords(String(formData.get("keywords") ?? ""));
   const maxProfilesRaw = Number(formData.get("maxProfiles") ?? 5);
   const maxProfilesPerKeyword = Math.max(1, Math.min(Number.isFinite(maxProfilesRaw) ? maxProfilesRaw : 5, 10));
@@ -28,7 +30,7 @@ export async function queueProspectingRun(formData: FormData) {
     redirectWithNotice("Supabase não está configurado. A prospecção não foi enfileirada.");
   }
 
-  const idempotencyKey = `discover:${audience.id}:${keywords.join("|").toLowerCase()}:${maxProfilesPerKeyword}:${new Date().toISOString().slice(0, 13)}`;
+  const idempotencyKey = `discover:${audienceId}:${keywords.join("|").toLowerCase()}:${maxProfilesPerKeyword}:${new Date().toISOString().slice(0, 13)}`;
   const { data: job, error } = await supabase.from("jobs").upsert(
     {
       type: "discover_leads",
@@ -36,8 +38,8 @@ export async function queueProspectingRun(formData: FormData) {
       idempotency_key: idempotencyKey,
       max_attempts: 1,
       payload: {
-        audienceId: audience.id,
-        audienceLabel: audience.label,
+        audienceId,
+        audienceLabel,
         keywords,
         maxProfilesPerKeyword,
         source: "dashboard",
@@ -70,7 +72,7 @@ export async function queueProspectingRun(formData: FormData) {
   }
 
   revalidatePath("/");
-  redirectWithNotice(`Prospecção enfileirada: ${audience.label} com ${keywords.length} buscas. Modo dry-run: nenhum contato será enviado.`);
+  redirectWithNotice(`Prospecção enfileirada: ${audienceLabel} com ${keywords.length} buscas. Modo dry-run: nenhum contato será enviado.`);
 }
 
 async function runProspectingKeywords(keywords: string[], maxProfilesPerKeyword: number) {

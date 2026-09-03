@@ -24,6 +24,7 @@ import { requiredTables } from "@/db/schema-notes";
 import { getDashboardData } from "@/features/analytics/dashboard-data";
 import { AppShell } from "@/components/app-shell";
 import { prospectingAudiences } from "@/features/prospecting/audiences";
+import { ProspectingLauncher } from "@/components/prospecting-launcher";
 import { queueProspectingRun } from "@/features/prospecting/prospecting-actions";
 
 type SearchParams = Promise<{
@@ -201,58 +202,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
         </header>
 
         <div className="space-y-6 px-5 py-6 md:px-8">
-          <section className="grid gap-4 rounded-lg border border-black/10 bg-white p-5 shadow-panel xl:grid-cols-[1fr_1.1fr]">
-            <div>
-              <div className="flex items-center gap-2 text-sm font-medium text-pine">
-                <Search className="h-4 w-4" />
-                Prospecção de leads
-              </div>
-              <h2 className="mt-2 text-xl font-semibold">Iniciar busca no Instagram</h2>
-              <div className="mt-4 grid gap-2">
-                {prospectingAudiences.slice(0, 4).map((audience) => (
-                  <div key={audience.id} className="rounded-md bg-[#f7f8f5] px-3 py-2">
-                    <div className="text-sm font-semibold">{audience.label}</div>
-                    <div className="mt-1 text-xs leading-5 text-ink/60">{audience.description}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <form action={queueProspectingRun} className="grid gap-3">
-              <label className="grid gap-2">
-                <span className="text-xs font-semibold uppercase text-ink/45">Público</span>
-                <select className="h-10 rounded-md border border-black/10 bg-white px-3 text-sm" name="audience" defaultValue="auto">
-                  {prospectingAudiences.map((audience) => (
-                    <option key={audience.id} value={audience.id}>
-                      {audience.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="grid gap-2">
-                <span className="text-xs font-semibold uppercase text-ink/45">Buscas sugeridas ou personalizadas</span>
-                <textarea
-                  className="min-h-28 rounded-md border border-black/10 bg-white px-3 py-3 text-sm leading-6 outline-none focus:border-pine"
-                  defaultValue={prospectingAudiences[0].keywords.join("\n")}
-                  name="keywords"
-                />
-              </label>
-              <label className="grid gap-2">
-                <span className="text-xs font-semibold uppercase text-ink/45">Perfis por busca</span>
-                <input className="h-10 rounded-md border border-black/10 bg-white px-3 text-sm" defaultValue={5} min={1} max={10} name="maxProfiles" type="number" />
-              </label>
-              <label className="flex items-center gap-2 rounded-md border border-black/10 bg-[#f7f8f5] px-3 py-2 text-sm">
-                <input className="h-4 w-4 accent-pine" defaultChecked name="runNow" type="checkbox" />
-                Executar agora no Chrome conectado
-              </label>
-              <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-pine px-4 text-sm font-medium text-white transition hover:brightness-95 active:scale-[0.99]">
-                <Search className="h-4 w-4" />
-                Enfileirar prospecção
-              </button>
-              <div className="rounded-md bg-[#f7f8f5] px-3 py-2 text-xs leading-5 text-ink/60">
-                Em dry-run, o sistema pesquisa e registra leads para revisão. Nenhuma DM é enviada.
-              </div>
-            </form>
-          </section>
+          <ProspectingLauncher action={queueProspectingRun} audiences={prospectingAudiences} />
 
           <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {metrics.map(([title, value, Icon, tone]) => (

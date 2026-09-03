@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { generateFirstContactVariants } from "@/features/conversations/first-contact";
-import { approveLeadForOutreach, listLeadsForReview, updateLeadReviewState } from "@/features/leads/review-repository";
+import { approveLeadForOutreach, listLeadPipeline, listLeadsForReview, updateLeadReviewState } from "@/features/leads/review-repository";
 import { identifyProspectingLane, prospectingLaneLabel, type ProspectingLane } from "@/features/prospecting/prospecting-lane";
 import { scoreLead } from "@/features/scoring/scoring";
 
@@ -160,6 +160,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
   const selected = rows.find((row) => row.lead.id === params.selected) ?? rows[0] ?? null;
   const selectedApproaches = selected ? generateFirstContactVariants(selected.input, scoreLead(selected.input)) : [];
   const returnTo = `/leads?q=${params.q ?? ""}&minScore=${params.minScore ?? ""}&lane=${params.lane ?? "all"}${selected ? `&selected=${selected.lead.id}` : ""}`;
+  const pipeline = selected ? await listLeadPipeline(selected.lead.id) : [];
   const counts = rows.reduce(
     (acc, row) => {
       acc[row.lane] += 1;
@@ -333,6 +334,29 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
                 <ReviewAction action="reject" icon={Trash2} label="Descartar" lane={selected.lane} lead={selected.lead} returnTo={returnTo} tone="bg-[#f1f2ee] text-ink" />
                 <div className="col-span-2">
                   <ReviewAction action="do_not_contact" icon={Ban} label="Não contatar" lane={selected.lane} lead={selected.lead} returnTo={returnTo} tone="bg-coral text-white" />
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-black/10 bg-white">
+                <div className="border-b border-black/10 px-4 py-3 font-semibold">Pipeline e acompanhamento</div>
+                <div className="divide-y divide-black/10">
+                  {pipeline.length > 0 ? (
+                    pipeline.map((item) => (
+                      <div className="px-4 py-3" key={`${item.kind}-${item.id}`}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="text-sm font-semibold">{item.title}</div>
+                            <div className="mt-1 line-clamp-3 text-xs leading-5 text-ink/60">{item.detail}</div>
+                          </div>
+                          <span className="shrink-0 rounded-md bg-[#f1f2ee] px-2 py-1 text-xs font-medium text-ink/65">{item.status}</span>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="px-4 py-3 text-sm leading-6 text-ink/60">
+                      Nenhuma etapa registrada ainda. Ao aprovar uma abordagem, o CRM cria a conversa, salva a mensagem e agenda o acompanhamento.
+                    </div>
+                  )}
                 </div>
               </div>
 

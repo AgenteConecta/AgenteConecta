@@ -14,7 +14,6 @@ import {
   Play,
   Search,
   Send,
-  Settings,
   Smartphone,
 } from "lucide-react";
 import { formatBRL, loadBusinessConfig } from "@/lib/business-config";
@@ -26,9 +25,13 @@ import { OperationalModeSwitch } from "@/components/operational-mode-switch";
 import { prospectingAudiences } from "@/features/prospecting/audiences";
 import { ProspectingLauncher } from "@/components/prospecting-launcher";
 import { queueProspectingRun } from "@/features/prospecting/prospecting-actions";
+import { listLeadsForReview } from "@/features/leads/review-repository";
 import { getApprovedOutreachCount, getAutomaticOutreachCandidateCount, processApprovedOutreach, processAutomaticQualifiedOutreach } from "@/features/outreach/outreach-actions";
 import { getOperationalAppMode } from "@/features/safety/app-mode";
 import { getOperationalPause, resumeAllWork, suspendAllWork } from "@/features/safety/operation-pause";
+import { identifyProspectingLane, type ProspectingLane } from "@/features/prospecting/prospecting-lane";
+import { scoreLead } from "@/features/scoring/scoring";
+import type { DashboardLead } from "@/features/analytics/dashboard-data";
 
 type SearchParams = Promise<{
   notice?: string;
@@ -47,40 +50,6 @@ const sampleLead = {
   discoverySource: "instagram_keyword",
   discoveryKeyword: "automação centralizada",
 };
-
-const trainingColumns = [
-  "Descoberto",
-  "Qualificado",
-  "Abordado",
-  "Respondeu",
-  "Perfil identificado",
-  "Interessado",
-  "WhatsApp",
-  "Oferta apresentada",
-  "Checkout",
-  "Aluno",
-  "Treinamento concluído",
-  "Encerrado",
-];
-
-const credentialingColumns = [
-  "Descoberto",
-  "Qualificado",
-  "Abordado",
-  "Respondeu",
-  "Empresa identificada",
-  "Interessado",
-  "Qualificação",
-  "WhatsApp",
-  "Oferta apresentada",
-  "Treinamento",
-  "Certificação",
-  "CNPJ",
-  "Credenciado",
-  "Primeiro pedido",
-  "Revendedor ativo",
-  "Encerrado",
-];
 
 function MetricCard({
   title,
@@ -104,21 +73,102 @@ function MetricCard({
   );
 }
 
-function FunnelPreview({ title, columns }: { title: string; columns: string[] }) {
+type Stage = {
+  label: string;
+  match: (lead: DashboardLead) => boolean;
+  href: string;
+};
+
+const contactedStates = new Set(["approved_for_outreach", "auto_outreach_qualified", "outreach_prepared", "operator_confirmation_required"]);
+const closedStates = new Set(["rejected", "do_not_contact"]);
+
+function toLeadInput(lead: DashboardLead) {
+  return {
+    instagramUsername: `@${lead.instagram_username ?? ""}`,
+    displayName: lead.display_name ?? lead.instagram_username ?? "Lead",
+    bio: lead.bio ?? "",
+    city: lead.city ?? undefined,
+    state: lead.state ?? undefined,
+    discoveryKeyword: lead.discovery_keyword ?? undefined,
+  };
+}
+
+function laneForLead(lead: DashboardLead): ProspectingLane {
+  const input = toLeadInput(lead);
+  const computedScore = scoreLead(input);
+
+  return identifyProspectingLane(input, {
+    ...computedScore,
+    leadScore: lead.lead_score ?? computedScore.leadScore,
+    commercialValueScore: lead.commercial_value_score ?? computedScore.commercialValueScore,
+    leadType:
+      lead.lead_type === "learner" || lead.lead_type === "professional" || lead.lead_type === "business"
+        ? lead.lead_type
+        : computedScore.leadType,
+  });
+}
+
+function stagesForLane(lane: ProspectingLane): Stage[] {
+  const laneQuery = `lane=${lane}`;
+
+  return [
+    {
+      label: "Todos os leads",
+      match: () => true,
+      href: `/leads?${laneQuery}&status=all`,
+    },
+    {
+      label: "Novos",
+      match: (lead) => (lead.channel_state ?? "none") === "none",
+      href: `/leads?${laneQuery}&status=none`,
+    },
+    {
+      label: "Qualificados",
+      match: (lead) => Number(lead.lead_score ?? 0) >= 50,
+      href: `/leads?${laneQuery}&status=qualified`,
+    },
+    {
+      label: "Abordagem/contato",
+      match: (lead) => contactedStates.has(lead.channel_state ?? ""),
+      href: `/leads?${laneQuery}&status=contacted`,
+    },
+    {
+      label: "Parceria",
+      match: (lead) => lead.channel_state === "partnership_review",
+      href: `/leads?${laneQuery}&status=partnership_review`,
+    },
+    {
+      label: "Nutrir depois",
+      match: (lead) => lead.channel_state === "nurture_later",
+      href: `/leads?${laneQuery}&status=nurture_later`,
+    },
+    {
+      label: "Encerrados",
+      match: (lead) => closedStates.has(lead.channel_state ?? ""),
+      href: `/leads?${laneQuery}&status=closed`,
+    },
+  ];
+}
+
+function FunnelPreview({ title, lane, leads }: { title: string; lane: ProspectingLane; leads: DashboardLead[] }) {
+  const laneLeads = leads.filter((lead) => laneForLead(lead) === lane);
+  const stages = stagesForLane(lane);
+
   return (
     <section className="rounded-lg border border-black/10 bg-white p-5 shadow-panel">
       <div className="mb-4 flex items-center justify-between gap-3">
         <h2 className="text-lg font-semibold">{title}</h2>
-        <button className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-black/10 text-ink/70" aria-label="Ajustar funil">
-          <Settings className="h-4 w-4" />
-        </button>
+        <a className="inline-flex h-9 items-center justify-center rounded-md border border-black/10 px-3 text-sm font-medium text-ink/70" href={`/leads?lane=${lane}`}>
+          Ver leads
+        </a>
       </div>
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-6">
-        {columns.map((column, index) => (
-          <div key={column} className="min-h-20 rounded-md border border-black/10 bg-[#f7f8f5] p-3">
-            <div className="text-xs font-medium text-ink/65">{column}</div>
-            <div className="mt-3 text-xl font-semibold">{index < 4 ? [382, 91, 18, 7][index] : index === columns.length - 1 ? 2 : 1}</div>
-          </div>
+        {stages.map((stage) => (
+          <a className="min-h-20 rounded-md border border-black/10 bg-[#f7f8f5] p-3 transition hover:border-pine/30 hover:bg-mint/70" href={stage.href} key={stage.label}>
+            <div className="text-xs font-medium text-ink/65">{stage.label}</div>
+            <div className="mt-3 text-xl font-semibold">{laneLeads.filter(stage.match).length}</div>
+            <div className="mt-1 text-xs text-pine">Abrir lista</div>
+          </a>
         ))}
       </div>
     </section>
@@ -128,12 +178,13 @@ function FunnelPreview({ title, columns }: { title: string; columns: string[] })
 export default async function Home({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
   const business = loadBusinessConfig();
-  const [dashboard, approvedOutreachCount, automaticCandidateCount, appMode, pause] = await Promise.all([
+  const [dashboard, approvedOutreachCount, automaticCandidateCount, appMode, pause, allLeads] = await Promise.all([
     getDashboardData(),
     getApprovedOutreachCount(),
     getAutomaticOutreachCandidateCount(),
     getOperationalAppMode(),
     getOperationalPause(),
+    listLeadsForReview({}),
   ]);
   const hotLead = dashboard.hotLead;
   const hotLeadInput = hotLead
@@ -380,8 +431,12 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
             </div>
           </section>
 
-          <FunnelPreview title="Kanban Treinamento" columns={trainingColumns} />
-          <FunnelPreview title="Kanban Credenciamento" columns={credentialingColumns} />
+          <section className="grid gap-6 xl:grid-cols-2">
+            <FunnelPreview title="Leads para treinamento" lane="training" leads={allLeads} />
+            <FunnelPreview title="Leads para credenciamento" lane="credentialing" leads={allLeads} />
+            <FunnelPreview title="Leads para equipamentos" lane="equipment" leads={allLeads} />
+            <FunnelPreview title="Leads para parceria/divulgação" lane="partnership" leads={allLeads} />
+          </section>
 
           <section className="rounded-lg border border-black/10 bg-white p-5 shadow-panel">
             <h2 className="text-lg font-semibold">Banco e integrações</h2>

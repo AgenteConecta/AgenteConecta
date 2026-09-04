@@ -8,6 +8,7 @@ export type LeadReviewFilters = {
   q?: string;
   minScore?: number;
   lane?: string;
+  status?: string;
 };
 
 export type LeadPipelineItem = {
@@ -58,6 +59,16 @@ export async function listLeadsForReview(filters: LeadReviewFilters): Promise<Da
   if (filters.q) {
     const term = `%${filters.q}%`;
     query = query.or(`instagram_username.ilike.${term},display_name.ilike.${term},bio.ilike.${term},discovery_keyword.ilike.${term}`);
+  }
+
+  if (filters.status === "qualified" && !filters.minScore) {
+    query = query.gte("lead_score", 50);
+  } else if (filters.status === "contacted") {
+    query = query.in("channel_state", ["approved_for_outreach", "auto_outreach_qualified", "outreach_prepared", "operator_confirmation_required"]);
+  } else if (filters.status === "closed") {
+    query = query.in("channel_state", ["rejected", "do_not_contact"]);
+  } else if (filters.status && filters.status !== "all") {
+    query = query.eq("channel_state", filters.status);
   }
 
   const { data, error } = await query;

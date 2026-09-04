@@ -61,7 +61,7 @@ export async function listLeadsForReview(filters: LeadReviewFilters): Promise<Da
 
   let query = supabase
     .from("leads")
-    .select("id, instagram_username, display_name, bio, city, state, lead_type, market_awareness, lead_score, commercial_value_score, discovery_keyword, discovered_at, updated_at, channel_state, do_not_contact, human_review_required")
+    .select("id, instagram_username, display_name, bio, city, state, phone, lead_type, market_awareness, lead_score, commercial_value_score, discovery_keyword, discovered_at, updated_at, channel_state, do_not_contact, human_review_required")
     .order("updated_at", { ascending: false })
     .limit(500);
 
@@ -483,6 +483,11 @@ function eventTitle(eventType: string) {
     approved_for_outreach: "Abordagem aprovada",
     outreach_message_prepared: "Mensagem preparada",
     discovered_on_instagram: "Lead descoberto",
+    whatsapp_message_sent: "WhatsApp enviado",
+    whatsapp_reply_received: "Resposta no WhatsApp",
+    whatsapp_prepared: "WhatsApp preparado",
+    dry_run_prepared_not_sent: "Mensagem preparada",
+    send_failed: "Falha de envio",
     review_partnership: "Marcado como parceria",
     review_nurture: "Marcado para nutrir",
     review_reject: "Lead descartado",

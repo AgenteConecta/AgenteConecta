@@ -13,6 +13,7 @@ import {
   UserRoundSearch,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { WhatsAppLeadPanel } from "@/components/whatsapp-lead-panel";
 import { generateFirstContactVariants } from "@/features/conversations/first-contact";
 import { approveLeadForOutreach, listLeadPipeline, listLeadsForReview, updateLeadReviewState } from "@/features/leads/review-repository";
 import { getOperationalAppMode } from "@/features/safety/app-mode";
@@ -50,6 +51,9 @@ function statusLabel(state?: string | null) {
     nurture_later: "Nutrir depois",
     rejected: "Descartado",
     do_not_contact: "Não contatar",
+    whatsapp_prepared: "WhatsApp preparado",
+    whatsapp_contacted: "WhatsApp enviado",
+    whatsapp_replied: "Respondeu no WhatsApp",
   };
 
   return labels[state ?? "none"] ?? state ?? "Novo";
@@ -431,9 +435,16 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
                       {approach}
                     </div>
                   ))}
-                  <ApprovalMessageForm lead={selected.lead} lane={selected.lane} message={selectedApproaches[0] ?? ""} returnTo={returnTo} />
-                </div>
-              </div>
+              <ApprovalMessageForm lead={selected.lead} lane={selected.lane} message={selectedApproaches[0] ?? ""} returnTo={returnTo} />
+            </div>
+          </div>
+
+              <WhatsAppLeadPanel
+                appMode={appMode}
+                defaultMessage={selectedApproaches[0] ?? ""}
+                initialPhone={selected.lead.phone}
+                leadId={selected.lead.id}
+              />
 
               <div className="grid grid-cols-2 gap-2">
                 <ReviewAction action="partnership" icon={Handshake} label="Parceria" lane={selected.lane} lead={selected.lead} returnTo={returnTo} tone="bg-sky text-white" />

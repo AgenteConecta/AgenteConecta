@@ -7,6 +7,7 @@ export type DashboardLead = {
   bio: string | null;
   city: string | null;
   state: string | null;
+  phone?: string | null;
   lead_type: string | null;
   market_awareness: string | null;
   lead_score: number | null;

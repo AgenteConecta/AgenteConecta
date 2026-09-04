@@ -29,14 +29,21 @@ export async function updateOperationalAppMode(formData: FormData) {
     redirectWithNotice("Supabase não está configurado. Não foi possível alterar o modo.");
   }
 
-  await supabase.from("settings").upsert({
-    key: "app_mode",
-    value: {
-      mode,
-      updatedAt: new Date().toISOString(),
+  const { error } = await supabase.from("settings").upsert(
+    {
+      key: "app_mode",
+      value: {
+        mode,
+        updatedAt: new Date().toISOString(),
+      },
+      updated_at: new Date().toISOString(),
     },
-    updated_at: new Date().toISOString(),
-  });
+    { onConflict: "key" },
+  );
+
+  if (error) {
+    redirectWithNotice(`Erro ao alterar modo operacional: ${error.message}`);
+  }
 
   revalidatePath("/");
   revalidatePath("/leads");

@@ -15,7 +15,6 @@ import {
   Search,
   Send,
   Settings,
-  ShieldCheck,
   Smartphone,
 } from "lucide-react";
 import { formatBRL, loadBusinessConfig } from "@/lib/business-config";
@@ -23,13 +22,13 @@ import { generateFirstContactMessage } from "@/features/conversations/first-cont
 import { requiredTables } from "@/db/schema-notes";
 import { getDashboardData } from "@/features/analytics/dashboard-data";
 import { AppShell } from "@/components/app-shell";
+import { OperationalModeSwitch } from "@/components/operational-mode-switch";
 import { prospectingAudiences } from "@/features/prospecting/audiences";
 import { ProspectingLauncher } from "@/components/prospecting-launcher";
 import { queueProspectingRun } from "@/features/prospecting/prospecting-actions";
 import { getApprovedOutreachCount, getAutomaticOutreachCandidateCount, processApprovedOutreach, processAutomaticQualifiedOutreach } from "@/features/outreach/outreach-actions";
 import { getOperationalAppMode, updateOperationalAppMode } from "@/features/safety/app-mode";
 import { getOperationalPause, resumeAllWork, suspendAllWork } from "@/features/safety/operation-pause";
-import type { AppMode } from "@/lib/types";
 
 type SearchParams = Promise<{
   notice?: string;
@@ -126,29 +125,16 @@ function FunnelPreview({ title, columns }: { title: string; columns: string[] })
   );
 }
 
-function ModeButton({ mode, active, label }: { mode: AppMode; active: boolean; label: string }) {
-  return (
-    <form action={updateOperationalAppMode}>
-      <input name="mode" type="hidden" value={mode} />
-      <button
-        className={`inline-flex h-9 items-center justify-center rounded-md px-3 text-sm font-medium transition ${
-          active ? "bg-pine text-white" : "border border-black/10 bg-white text-ink/70 hover:bg-mint hover:text-pine"
-        }`}
-      >
-        {label}
-      </button>
-    </form>
-  );
-}
-
 export default async function Home({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
   const business = loadBusinessConfig();
-  const dashboard = await getDashboardData();
-  const approvedOutreachCount = await getApprovedOutreachCount();
-  const automaticCandidateCount = await getAutomaticOutreachCandidateCount();
-  const appMode = await getOperationalAppMode();
-  const pause = await getOperationalPause();
+  const [dashboard, approvedOutreachCount, automaticCandidateCount, appMode, pause] = await Promise.all([
+    getDashboardData(),
+    getApprovedOutreachCount(),
+    getAutomaticOutreachCandidateCount(),
+    getOperationalAppMode(),
+    getOperationalPause(),
+  ]);
   const hotLead = dashboard.hotLead;
   const hotLeadInput = hotLead
     ? {
@@ -225,18 +211,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
               </span>
             </div>
           </div>
-          <div className="mt-4 flex flex-col gap-3 rounded-lg border border-black/10 bg-[#f7f8f5] p-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-2 text-sm font-medium text-ink/70">
-              <ShieldCheck className="h-4 w-4 text-pine" />
-              Modo operacional
-              <span className="rounded-md bg-white px-2 py-1 text-xs font-semibold text-pine">{appMode}</span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <ModeButton mode="dry_run" active={appMode === "dry_run"} label="Dry-run" />
-              <ModeButton mode="pilot" active={appMode === "pilot"} label="Pilot" />
-              <ModeButton mode="production" active={appMode === "production"} label="Production" />
-            </div>
-          </div>
+          <OperationalModeSwitch currentMode={appMode} action={updateOperationalAppMode} />
           {params.notice ? (
             <div className="mt-4 rounded-md border border-pine/20 bg-mint px-4 py-3 text-sm font-medium text-pine">
               {params.notice}

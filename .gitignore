@@ -13,3 +13,4 @@ coverage/
 dist/
 tsconfig.tsbuildinfo
 *.log
+.runtime-settings.json

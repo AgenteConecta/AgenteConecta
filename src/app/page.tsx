@@ -27,7 +27,7 @@ import { prospectingAudiences } from "@/features/prospecting/audiences";
 import { ProspectingLauncher } from "@/components/prospecting-launcher";
 import { queueProspectingRun } from "@/features/prospecting/prospecting-actions";
 import { getApprovedOutreachCount, getAutomaticOutreachCandidateCount, processApprovedOutreach, processAutomaticQualifiedOutreach } from "@/features/outreach/outreach-actions";
-import { getOperationalAppMode, updateOperationalAppMode } from "@/features/safety/app-mode";
+import { getOperationalAppMode } from "@/features/safety/app-mode";
 import { getOperationalPause, resumeAllWork, suspendAllWork } from "@/features/safety/operation-pause";
 
 type SearchParams = Promise<{
@@ -211,7 +211,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
               </span>
             </div>
           </div>
-          <OperationalModeSwitch currentMode={appMode} action={updateOperationalAppMode} />
+          <OperationalModeSwitch currentMode={appMode} />
           {params.notice ? (
             <div className="mt-4 rounded-md border border-pine/20 bg-mint px-4 py-3 text-sm font-medium text-pine">
               {params.notice}

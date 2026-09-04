@@ -1,5 +1,7 @@
 "use server";
 
+import { readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSupabaseAdminClient } from "@/integrations/supabase/client";
@@ -7,8 +9,15 @@ import { env } from "@/lib/env";
 import type { AppMode } from "@/lib/types";
 
 const appModes = new Set<AppMode>(["simulation", "dry_run", "pilot", "production"]);
+const runtimeSettingsPath = path.join(process.cwd(), ".runtime-settings.json");
 
 export async function getOperationalAppMode(): Promise<AppMode> {
+  const localMode = await readLocalAppMode();
+
+  if (localMode) {
+    return localMode;
+  }
+
   const supabase = getSupabaseAdminClient();
 
   if (!supabase) {
@@ -23,10 +32,27 @@ export async function getOperationalAppMode(): Promise<AppMode> {
 
 export async function updateOperationalAppMode(formData: FormData) {
   const mode = normalizeAppMode(String(formData.get("mode") ?? "dry_run"));
+  const result = await setOperationalAppMode(mode);
+
+  if (!result.ok) {
+    redirectWithNotice(result.message);
+  }
+
+  revalidatePath("/");
+  revalidatePath("/leads");
+  redirectWithNotice(`Modo operacional alterado para ${labelAppMode(mode)}.`);
+}
+
+export async function setOperationalAppMode(modeInput: string): Promise<{ ok: true; mode: AppMode } | { ok: false; message: string }> {
+  const mode = normalizeAppMode(modeInput);
   const supabase = getSupabaseAdminClient();
 
   if (!supabase) {
-    redirectWithNotice("Supabase não está configurado. Não foi possível alterar o modo.");
+    await writeLocalAppMode(mode);
+    return {
+      ok: true,
+      mode,
+    };
   }
 
   const { error } = await supabase.from("settings").upsert(
@@ -42,12 +68,19 @@ export async function updateOperationalAppMode(formData: FormData) {
   );
 
   if (error) {
-    redirectWithNotice(`Erro ao alterar modo operacional: ${error.message}`);
+    await writeLocalAppMode(mode);
+    return {
+      ok: true,
+      mode,
+    };
   }
 
-  revalidatePath("/");
-  revalidatePath("/leads");
-  redirectWithNotice(`Modo operacional alterado para ${labelAppMode(mode)}.`);
+  await writeLocalAppMode(mode);
+
+  return {
+    ok: true,
+    mode,
+  };
 }
 
 export async function labelOperationalAppMode(mode: AppMode) {
@@ -70,6 +103,40 @@ function labelAppMode(mode: AppMode) {
   }
 
   return "dry-run";
+}
+
+async function readLocalAppMode(): Promise<AppMode | null> {
+  try {
+    const raw = await readFile(runtimeSettingsPath, "utf8");
+    const settings = JSON.parse(raw) as { appMode?: string };
+    return settings.appMode ? normalizeAppMode(settings.appMode) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function writeLocalAppMode(mode: AppMode) {
+  let settings: Record<string, unknown> = {};
+
+  try {
+    settings = JSON.parse(await readFile(runtimeSettingsPath, "utf8")) as Record<string, unknown>;
+  } catch {
+    settings = {};
+  }
+
+  await writeFile(
+    runtimeSettingsPath,
+    `${JSON.stringify(
+      {
+        ...settings,
+        appMode: mode,
+        updatedAt: new Date().toISOString(),
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
 }
 
 function redirectWithNotice(notice: string): never {

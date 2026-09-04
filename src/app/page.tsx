@@ -201,6 +201,17 @@ function statusTone(status: string) {
   return "bg-coral/10 text-coral";
 }
 
+function outreachModeLabel(appMode: string) {
+  if (appMode === "production") {
+    return "envia no Instagram";
+  }
+  if (appMode === "pilot") {
+    return "abre para confirmar";
+  }
+
+  return "bloqueado";
+}
+
 function LeadStoragePanel({ stats, runs }: { stats: LeadStorageStats; runs: ProspectingRunSummary[] }) {
   const typeLabels = {
     business: "Empresas",
@@ -423,7 +434,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
                 </div>
                 <div className="rounded-md bg-[#f7f8f5] px-3 py-2">
                   <div className="text-xs text-ink/55">Envio real</div>
-                  <div className="text-sm font-semibold">{appMode === "dry_run" || appMode === "simulation" ? "bloqueado" : "confirmação"}</div>
+                  <div className="text-sm font-semibold">{outreachModeLabel(appMode)}</div>
                 </div>
               </div>
             </div>
@@ -459,7 +470,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
                 </div>
                 <div className="rounded-md bg-[#f7f8f5] px-3 py-2">
                   <div className="text-xs text-ink/55">Envio real</div>
-                  <div className="text-sm font-semibold">{appMode === "dry_run" || appMode === "simulation" ? "bloqueado" : "confirmação"}</div>
+                  <div className="text-sm font-semibold">{outreachModeLabel(appMode)}</div>
                 </div>
                 <div className="rounded-md bg-[#f7f8f5] px-3 py-2">
                   <div className="text-xs text-ink/55">Lotes disponíveis</div>

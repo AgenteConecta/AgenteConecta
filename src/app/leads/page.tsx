@@ -45,6 +45,7 @@ function statusLabel(state?: string | null) {
   const labels: Record<string, string> = {
     none: "Novo",
     approved_for_outreach: "Aprovado",
+    contacted: "Contatado",
     partnership_review: "Parceria",
     nurture_later: "Nutrir depois",
     rejected: "Descartado",

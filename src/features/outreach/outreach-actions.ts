@@ -114,6 +114,7 @@ export async function processApprovedOutreach(formData: FormData) {
   }
 
   let processed = 0;
+  let sent = 0;
   let blocked = 0;
   let failed = 0;
 
@@ -154,7 +155,7 @@ export async function processApprovedOutreach(formData: FormData) {
       await supabase
         .from("leads")
         .update({
-          channel_state: result.result === "dry_run_blocked" ? "outreach_prepared" : "operator_confirmation_required",
+          channel_state: result.result === "dry_run_blocked" ? "outreach_prepared" : result.result === "sent" ? "contacted" : "operator_confirmation_required",
           updated_at: new Date().toISOString(),
         })
         .eq("id", message.lead_id);
@@ -165,6 +166,8 @@ export async function processApprovedOutreach(formData: FormData) {
         summary:
           result.result === "dry_run_blocked"
             ? `Contato de @${username} validado, mas não enviado por dry-run.`
+            : result.result === "sent"
+              ? `Mensagem enviada para @${username} pelo Instagram.`
             : `Perfil @${username} aberto para confirmação operacional de envio.`,
         payload: {
           messageId: message.id,
@@ -174,7 +177,11 @@ export async function processApprovedOutreach(formData: FormData) {
         },
       });
 
-      processed += 1;
+      if (result.result === "sent") {
+        sent += 1;
+      } else {
+        processed += 1;
+      }
     } catch (sendError) {
       failed += 1;
       const detail = sendError instanceof Error ? sendError.message : "Erro desconhecido ao processar contato.";
@@ -184,7 +191,7 @@ export async function processApprovedOutreach(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/leads");
-  redirectWithNotice(`Envio processado: ${processed} preparados, ${blocked} bloqueados, ${failed} falhas. Modo atual: ${appMode}.`);
+  redirectWithNotice(`Envio processado: ${sent} enviados, ${processed} preparados, ${blocked} bloqueados, ${failed} falhas. Modo atual: ${appMode}.`);
 }
 
 export async function processAutomaticQualifiedOutreach(formData: FormData) {
@@ -443,7 +450,7 @@ async function processMessageById(messageId: string) {
     await supabase
       .from("leads")
       .update({
-        channel_state: result.result === "dry_run_blocked" ? "outreach_prepared" : "operator_confirmation_required",
+        channel_state: result.result === "dry_run_blocked" ? "outreach_prepared" : result.result === "sent" ? "contacted" : "operator_confirmation_required",
         updated_at: new Date().toISOString(),
       })
       .eq("id", message.lead_id);
@@ -453,6 +460,8 @@ async function processMessageById(messageId: string) {
       summary:
         result.result === "dry_run_blocked"
           ? `Contato automático de @${username} validado, mas não enviado por dry-run.`
+          : result.result === "sent"
+            ? `Contato automático enviado para @${username} pelo Instagram.`
           : `Contato automático de @${username} preparado para confirmação operacional.`,
       payload: {
         messageId: message.id,

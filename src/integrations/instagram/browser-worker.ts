@@ -357,6 +357,23 @@ export async function sendInitialInstagramDm(params: {
       });
     }
 
+    if (appMode === "production") {
+      const sendButton = page
+        .locator('div[role="button"], button')
+        .filter({ hasText: /enviar|send/i })
+        .last();
+
+      await sendButton.click({ timeout: 10000 });
+      await page.waitForTimeout(1200);
+
+      return {
+        result: "sent",
+        pageUrl: page.url(),
+        sentAt: new Date().toISOString(),
+        idempotencyKey: params.idempotencyKey,
+      };
+    }
+
     return {
       result: "operator_confirmation_required",
       pageUrl: page.url(),

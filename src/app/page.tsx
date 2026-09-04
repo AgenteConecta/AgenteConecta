@@ -21,6 +21,7 @@ import { generateFirstContactMessage } from "@/features/conversations/first-cont
 import { requiredTables } from "@/db/schema-notes";
 import { getDashboardData } from "@/features/analytics/dashboard-data";
 import { AppShell } from "@/components/app-shell";
+import { ChromeInstagramControls } from "@/components/chrome-instagram-controls";
 import { OperationalModeSwitch } from "@/components/operational-mode-switch";
 import { prospectingAudiences } from "@/features/prospecting/audiences";
 import { ProspectingLauncher } from "@/components/prospecting-launcher";
@@ -263,6 +264,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
             </div>
           </div>
           <OperationalModeSwitch currentMode={appMode} />
+          <ChromeInstagramControls />
           {params.notice ? (
             <div className="mt-4 rounded-md border border-pine/20 bg-mint px-4 py-3 text-sm font-medium text-pine">
               {params.notice}

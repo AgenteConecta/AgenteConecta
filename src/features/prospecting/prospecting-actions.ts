@@ -144,19 +144,33 @@ async function runProspectingKeywords(keywords: string[], maxProfilesPerKeyword:
         break;
       }
 
-      const enrichedLead = await readInstagramPublicProfile(lead.instagramUsername).then((profile) => ({
-        ...lead,
-        ...profile,
-        discoverySource: lead.discoverySource,
-        discoveryKeyword: lead.discoveryKeyword,
-      }));
+      const enrichedLead = await withTimeout(
+        readInstagramPublicProfile(lead.instagramUsername).then((profile) => ({
+          ...lead,
+          ...profile,
+          discoverySource: lead.discoverySource,
+          discoveryKeyword: lead.discoveryKeyword,
+        })),
+        20000,
+        lead,
+      );
 
       if (!hasMinimumIcpSignal(enrichedLead)) {
         summary.filteredOut += 1;
         continue;
       }
 
-      const persistence = await persistDiscoveredLead(enrichedLead);
+      const persistence = await persistDiscoveredLead(enrichedLead).catch((error: unknown) => {
+        summary.errors += 1;
+        summary.errorMessage = error instanceof Error ? error.message : "Erro desconhecido ao salvar lead.";
+        summary.diagnostics.push(`${lead.instagramUsername}: falha ao salvar (${summary.errorMessage})`);
+        return null;
+      });
+
+      if (!persistence) {
+        continue;
+      }
+
       generateFirstContactMessage(enrichedLead, persistence.score);
 
       if (persistence.duplicateLeadId) {
@@ -168,6 +182,23 @@ async function runProspectingKeywords(keywords: string[], maxProfilesPerKeyword:
   }
 
   return summary;
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> {
+  let timeout: NodeJS.Timeout | undefined;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((resolve) => {
+        timeout = setTimeout(() => resolve(fallback), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
 }
 
 function normalizeBatchSize(value: number) {

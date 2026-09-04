@@ -41,7 +41,7 @@ function normalize(value: string): string {
 }
 
 export function hasMinimumIcpSignal(lead: LeadProfileInput): boolean {
-  const text = normalize([lead.displayName, lead.bio, lead.category, lead.website, ...(lead.posts ?? [])].filter(Boolean).join(" "));
+  const text = normalize([lead.displayName, lead.bio, lead.category, lead.website, lead.discoveryKeyword, lead.discoverySource, ...(lead.posts ?? [])].filter(Boolean).join(" "));
   const score = scoreLead(lead);
 
   return minimumIcpTerms.some((term) => text.includes(normalize(term))) || score.leadScore >= 20 || score.commercialValueScore >= 20;

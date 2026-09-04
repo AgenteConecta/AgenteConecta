@@ -1,9 +1,11 @@
-import { chromium, type Browser } from "playwright";
+import { chromium, type Browser, type Page } from "playwright";
+import { loadBusinessConfig } from "@/lib/business-config";
 import { env } from "@/lib/env";
 import { getOperationalAppMode } from "@/features/safety/app-mode";
 import type { LeadProfileInput } from "@/lib/types";
 
 const allowedHosts = new Set(["instagram.com", "www.instagram.com"]);
+const blockedUsernameSegments = new Set(["explore", "p", "reel", "reels", "accounts", "about", "direct", "legal", "privacy", "web", "popular"]);
 
 export function assertInstagramUrl(url: string): void {
   const parsed = new URL(url);
@@ -17,7 +19,7 @@ export async function connectInstagramBrowser(): Promise<Browser | null> {
     return null;
   }
 
-  return chromium.connectOverCDP(env.chromeCdpUrl);
+  return chromium.connectOverCDP(env.chromeCdpUrl, { timeout: 5000 });
 }
 
 export function hashtagUrl(keyword: string): string {
@@ -109,7 +111,7 @@ export async function checkInstagramSession(): Promise<{
       loggedIn: state.loggedIn,
       title: await page.title(),
       url: page.url(),
-      reason: state.loggedIn ? null : "Instagram session appears logged out in the CDP Chrome profile.",
+      reason: state.loggedIn ? null : "Instagram não está logado no perfil do Chrome usado pela automação.",
     };
   } finally {
     await page.close();
@@ -129,6 +131,7 @@ export async function discoverProfilesFromHashtag(params: {
   const page = await context.newPage();
   const urls = [hashtagUrl(params.keyword), searchUrl(params.keyword)];
   urls.forEach(assertInstagramUrl);
+  const ownUsername = loadBusinessConfig().channels.instagram.handle.replace(/^@/, "").toLowerCase();
 
   try {
     const usernames: string[] = [];
@@ -146,25 +149,7 @@ export async function discoverProfilesFromHashtag(params: {
         throw new Error("Instagram session is not logged in for the Chrome CDP profile.");
       }
 
-      const visibleUsernames = await page.evaluate((limit) => {
-        const blocked = new Set(["explore", "p", "reel", "reels", "accounts", "about", "direct", "legal", "privacy", "web", "popular"]);
-        return Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href^="/"]'))
-          .map((anchor) => anchor.getAttribute("href") ?? "")
-          .map((href) => href.split("/").filter(Boolean)[0] ?? "")
-          .filter((segment) => /^[a-zA-Z0-9._]{2,30}$/.test(segment))
-          .filter((segment) => !blocked.has(segment))
-          .filter((segment, index, all) => all.indexOf(segment) === index)
-          .slice(0, limit);
-      }, params.maxProfiles * 2);
-
-      for (const username of visibleUsernames) {
-        if (!usernames.includes(username)) {
-          usernames.push(username);
-        }
-        if (usernames.length >= params.maxProfiles) {
-          break;
-        }
-      }
+      addUsernames(usernames, await collectVisibleUsernames(page, params.maxProfiles * 3), params.maxProfiles, ownUsername);
 
       if (usernames.length >= params.maxProfiles) {
         break;
@@ -182,19 +167,9 @@ export async function discoverProfilesFromHashtag(params: {
         await page.goto(postUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
         await page.waitForTimeout(1800);
 
-        const username = await page.evaluate(() => {
-          const blocked = new Set(["explore", "p", "reel", "reels", "accounts", "about", "direct"]);
-          const candidates = Array.from(document.querySelectorAll<HTMLAnchorElement>('article a[href^="/"], header a[href^="/"]'))
-            .map((anchor) => anchor.getAttribute("href") ?? "")
-            .map((href) => href.split("/").filter(Boolean)[0] ?? "")
-            .filter((segment) => /^[a-zA-Z0-9._]{2,30}$/.test(segment))
-            .filter((segment) => !blocked.has(segment))
-            .filter((segment) => !["legal", "privacy", "web", "popular"].includes(segment));
+        const username = (await collectVisibleUsernames(page, 3))[0] ?? null;
 
-          return candidates[0] ?? null;
-        });
-
-        if (username && !usernames.includes(username)) {
+        if (username && username.toLowerCase() !== ownUsername && !usernames.includes(username)) {
           usernames.push(username);
         }
         if (usernames.length >= params.maxProfiles) {
@@ -203,14 +178,79 @@ export async function discoverProfilesFromHashtag(params: {
       }
     }
 
+    if (usernames.length < params.maxProfiles) {
+      await collectFromInstagramSearchPanel(page, params.keyword, usernames, params.maxProfiles, ownUsername);
+    }
+
     return usernames.slice(0, params.maxProfiles).map((username) => ({
       instagramUsername: `@${username}`,
       country: "Brasil",
-      discoverySource: "instagram_hashtag_dry_run",
+      discoverySource: "instagram_browser_search",
       discoveryKeyword: params.keyword,
     }));
   } finally {
     await page.close();
+  }
+}
+
+async function collectFromInstagramSearchPanel(page: Page, keyword: string, usernames: string[], limit: number, ownUsername: string) {
+  await page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 45000 });
+  await page.waitForTimeout(1800);
+
+  const searchTrigger = page
+    .locator('a[aria-label*="Search"], a[aria-label*="Pesquisar"], button[aria-label*="Search"], button[aria-label*="Pesquisar"], svg[aria-label*="Search"], svg[aria-label*="Pesquisar"]')
+    .first();
+  await searchTrigger.click({ timeout: 7000 }).catch(() => undefined);
+  await page.waitForTimeout(800);
+
+  const searchInput = page
+    .locator('input[placeholder="Search"], input[placeholder="Pesquisar"], input[aria-label="Search input"], input[aria-label="Entrada da pesquisa"], input[type="text"]')
+    .first();
+
+  if ((await searchInput.count()) > 0) {
+    await searchInput.fill(keyword, { timeout: 7000 }).catch(() => undefined);
+    await page.waitForTimeout(3500);
+    addUsernames(usernames, await collectVisibleUsernames(page, limit * 4), limit, ownUsername);
+  }
+}
+
+async function collectVisibleUsernames(page: Page, limit: number) {
+  return page.evaluate(
+    ({ limit, blocked }) => {
+      const blockedSet = new Set(blocked);
+      const candidates = Array.from(document.querySelectorAll<HTMLAnchorElement>("a[href]"))
+        .map((anchor) => {
+          try {
+            return new URL(anchor.href, window.location.origin).pathname.split("/").filter(Boolean)[0] ?? "";
+          } catch {
+            return "";
+          }
+        })
+        .filter((segment) => /^[a-zA-Z0-9._]{2,30}$/.test(segment))
+        .filter((segment) => !blockedSet.has(segment.toLowerCase()));
+
+      const textCandidates = (document.body.textContent ?? "")
+        .match(/@[a-zA-Z0-9._]{2,30}/g)
+        ?.map((value) => value.replace(/^@/, "")) ?? [];
+
+      return [...candidates, ...textCandidates]
+        .filter((segment, index, all) => all.findIndex((item) => item.toLowerCase() === segment.toLowerCase()) === index)
+        .slice(0, limit);
+    },
+    { limit, blocked: Array.from(blockedUsernameSegments) },
+  );
+}
+
+function addUsernames(target: string[], candidates: string[], limit: number, ownUsername: string) {
+  for (const username of candidates) {
+    if (username.toLowerCase() === ownUsername || target.some((item) => item.toLowerCase() === username.toLowerCase())) {
+      continue;
+    }
+
+    target.push(username);
+    if (target.length >= limit) {
+      return;
+    }
   }
 }
 

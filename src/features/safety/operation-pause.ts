@@ -44,70 +44,91 @@ export async function isOperationallyPaused() {
   return (await getOperationalPause()).paused;
 }
 
-export async function suspendAllWork() {
+export async function setOperationalPause(paused: boolean): Promise<{ ok: boolean; message: string; pause: OperationalPause }> {
   const supabase = getSupabaseAdminClient();
 
   if (!supabase) {
-    redirectWithNotice("Supabase não está configurado. Não foi possível suspender.");
+    return {
+      ok: false,
+      message: paused ? "Supabase não está configurado. Não foi possível suspender." : "Supabase não está configurado. Não foi possível retomar.",
+      pause: {
+        paused: false,
+        reason: "Sem pausa operacional",
+        source: "none",
+      },
+    };
   }
 
+  const now = new Date().toISOString();
   const { error: settingsError } = await supabase.from("settings").upsert({
     key: "master_pause",
-    value: {
-      paused: true,
-      reason: "Suspenso imediatamente pelo painel",
-      pausedAt: new Date().toISOString(),
-    },
-    updated_at: new Date().toISOString(),
+    value: paused
+      ? {
+          paused: true,
+          reason: "Suspenso imediatamente pelo painel",
+          pausedAt: now,
+        }
+      : {
+          paused: false,
+          reason: "Retomado pelo painel",
+          resumedAt: now,
+        },
+    updated_at: now,
   });
 
   if (settingsError) {
-    redirectWithNotice(`Erro ao suspender: ${settingsError.message}`);
+    return {
+      ok: false,
+      message: paused ? `Erro ao suspender: ${settingsError.message}` : `Erro ao retomar: ${settingsError.message}`,
+      pause: await getOperationalPause(),
+    };
   }
 
-  const { error: jobsError } = await supabase
-    .from("jobs")
-    .update({
-      status: "cancelled",
-      last_error: "Cancelado pela pausa imediata no painel",
-      updated_at: new Date().toISOString(),
-    })
-    .in("status", ["queued", "running"])
-    .in("type", ["discover_leads", "send_instagram_dm", "schedule_followup"]);
+  if (paused) {
+    const { error: jobsError } = await supabase
+      .from("jobs")
+      .update({
+        status: "cancelled",
+        last_error: "Cancelado pela pausa imediata no painel",
+        updated_at: now,
+      })
+      .in("status", ["queued", "running"])
+      .in("type", ["discover_leads", "send_instagram_dm", "schedule_followup"]);
 
-  if (jobsError) {
-    redirectWithNotice(`Pausa ativada, mas houve erro ao cancelar jobs: ${jobsError.message}`);
+    if (jobsError) {
+      return {
+        ok: false,
+        message: `Pausa ativada, mas houve erro ao cancelar jobs: ${jobsError.message}`,
+        pause: await getOperationalPause(),
+      };
+    }
   }
+
+  return {
+    ok: true,
+    message: paused ? "Pesquisa e envio suspensos imediatamente. Jobs pendentes foram cancelados." : "Pesquisa e envio retomados.",
+    pause: {
+      paused,
+      reason: paused ? "Suspenso imediatamente pelo painel" : "Retomado pelo painel",
+      source: paused ? "settings" : "none",
+    },
+  };
+}
+
+export async function suspendAllWork() {
+  const result = await setOperationalPause(true);
 
   revalidatePath("/");
   revalidatePath("/leads");
-  redirectWithNotice("Pesquisa e envio suspensos imediatamente. Jobs pendentes foram cancelados.");
+  redirectWithNotice(result.message);
 }
 
 export async function resumeAllWork() {
-  const supabase = getSupabaseAdminClient();
-
-  if (!supabase) {
-    redirectWithNotice("Supabase não está configurado. Não foi possível retomar.");
-  }
-
-  const { error } = await supabase.from("settings").upsert({
-    key: "master_pause",
-    value: {
-      paused: false,
-      reason: "Retomado pelo painel",
-      resumedAt: new Date().toISOString(),
-    },
-    updated_at: new Date().toISOString(),
-  });
-
-  if (error) {
-    redirectWithNotice(`Erro ao retomar: ${error.message}`);
-  }
+  const result = await setOperationalPause(false);
 
   revalidatePath("/");
   revalidatePath("/leads");
-  redirectWithNotice("Pesquisa e envio retomados.");
+  redirectWithNotice(result.message);
 }
 
 function redirectWithNotice(notice: string): never {

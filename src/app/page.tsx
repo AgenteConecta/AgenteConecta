@@ -12,8 +12,6 @@ import {
   Handshake,
   Lock,
   MessageCircle,
-  PauseCircle,
-  Play,
   Search,
   Send,
   Smartphone,
@@ -25,13 +23,14 @@ import { getDashboardData } from "@/features/analytics/dashboard-data";
 import { AppShell } from "@/components/app-shell";
 import { ChromeInstagramControls } from "@/components/chrome-instagram-controls";
 import { OperationalModeSwitch } from "@/components/operational-mode-switch";
+import { PauseControls } from "@/components/pause-controls";
 import { prospectingAudiences } from "@/features/prospecting/audiences";
 import { ProspectingLauncher } from "@/components/prospecting-launcher";
 import { listRecentProspectingRuns, queueProspectingRun, type ProspectingRunSummary } from "@/features/prospecting/prospecting-actions";
 import { getLeadStorageStats, listLeadsForReview, type LeadStorageStats } from "@/features/leads/review-repository";
 import { getApprovedOutreachCount, getAutomaticOutreachCandidateCount, processApprovedOutreach, processAutomaticQualifiedOutreach } from "@/features/outreach/outreach-actions";
 import { getOperationalAppMode } from "@/features/safety/app-mode";
-import { getOperationalPause, resumeAllWork, suspendAllWork } from "@/features/safety/operation-pause";
+import { getOperationalPause } from "@/features/safety/operation-pause";
 import { identifyProspectingLane, type ProspectingLane } from "@/features/prospecting/prospecting-lane";
 import { scoreLead } from "@/features/scoring/scoring";
 import type { DashboardData, DashboardLead } from "@/features/analytics/dashboard-data";
@@ -388,24 +387,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
               <p className="text-sm font-medium text-pine">{business.company.name}</p>
               <h1 className="text-2xl font-semibold tracking-normal md:text-3xl">Sistema Comercial Autônomo</h1>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <form action={suspendAllWork}>
-                <button className="inline-flex items-center gap-2 rounded-md border border-coral/30 bg-white px-3 py-2 text-sm font-medium text-coral transition hover:bg-coral hover:text-white">
-                  <PauseCircle className="h-4 w-4" />
-                  Suspender agora
-                </button>
-              </form>
-              <form action={resumeAllWork}>
-                <button className="inline-flex items-center gap-2 rounded-md border border-black/10 bg-white px-3 py-2 text-sm font-medium text-ink/70 transition hover:bg-mint hover:text-pine">
-                  <Play className="h-4 w-4" />
-                  Retomar
-                </button>
-              </form>
-              <span className={`inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium ${pause.paused ? "bg-coral text-white" : "border border-pine/20 bg-mint text-pine"}`}>
-                <PauseCircle className="h-4 w-4" />
-                Pausa geral: {pause.paused ? "ativa" : "inativa"}
-              </span>
-            </div>
+            <PauseControls initialPause={pause} />
           </div>
           <OperationalModeSwitch currentMode={appMode} />
           <ChromeInstagramControls />

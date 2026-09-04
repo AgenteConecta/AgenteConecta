@@ -338,14 +338,33 @@ export async function sendInitialInstagramDm(params: {
   const context = browser.contexts()[0] ?? (await browser.newContext());
   const page = await context.newPage();
   try {
-    await page.goto(params.profileUrl, { waitUntil: "domcontentloaded" });
+    await page.goto(params.profileUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
+    await page.bringToFront();
+    await page.waitForTimeout(1800);
+
+    const messageButton = page
+      .locator('div[role="button"], button')
+      .filter({ hasText: /mensagem|message/i })
+      .first();
+    await messageButton.click({ timeout: 8000 }).catch(() => undefined);
+    await page.waitForTimeout(1800);
+
+    const textbox = page.locator('div[role="textbox"][contenteditable="true"], textarea').first();
+    if ((await textbox.count()) > 0) {
+      await textbox.fill(params.message, { timeout: 8000 }).catch(async () => {
+        await textbox.click({ timeout: 3000 }).catch(() => undefined);
+        await page.keyboard.insertText(params.message);
+      });
+    }
+
     return {
       result: "operator_confirmation_required",
       pageUrl: page.url(),
       sentAt: null,
       idempotencyKey: params.idempotencyKey,
     };
-  } finally {
-    await page.close();
+  } catch (error) {
+    await page.close().catch(() => undefined);
+    throw error;
   }
 }

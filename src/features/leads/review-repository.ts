@@ -9,6 +9,7 @@ export type LeadReviewFilters = {
   minScore?: number;
   lane?: string;
   status?: string;
+  leadType?: string;
 };
 
 export type LeadPipelineItem = {
@@ -18,6 +19,18 @@ export type LeadPipelineItem = {
   detail: string;
   status: string;
   createdAt: string | null;
+};
+
+export type LeadStorageStats = {
+  total: number;
+  qualified: number;
+  discoveredToday: number;
+  byType: {
+    business: number;
+    professional: number;
+    learner: number;
+    unknown: number;
+  };
 };
 
 type LeadProfileRow = {
@@ -50,7 +63,7 @@ export async function listLeadsForReview(filters: LeadReviewFilters): Promise<Da
     .from("leads")
     .select("id, instagram_username, display_name, bio, city, state, lead_type, market_awareness, lead_score, commercial_value_score, discovery_keyword, discovered_at, updated_at, channel_state, do_not_contact, human_review_required")
     .order("updated_at", { ascending: false })
-    .limit(100);
+    .limit(500);
 
   if (filters.minScore) {
     query = query.gte("lead_score", filters.minScore);
@@ -69,6 +82,10 @@ export async function listLeadsForReview(filters: LeadReviewFilters): Promise<Da
     query = query.in("channel_state", ["rejected", "do_not_contact"]);
   } else if (filters.status && filters.status !== "all") {
     query = query.eq("channel_state", filters.status);
+  }
+
+  if (filters.leadType && filters.leadType !== "all") {
+    query = query.eq("lead_type", filters.leadType);
   }
 
   const { data, error } = await query;
@@ -132,6 +149,49 @@ export async function listLeadsForReview(filters: LeadReviewFilters): Promise<Da
       latest_discovery_keyword: prospecting?.keyword ?? profile?.public_snapshot?.discoveryKeyword ?? lead.discovery_keyword,
     };
   });
+}
+
+export async function getLeadStorageStats(): Promise<LeadStorageStats> {
+  const supabase = getSupabaseAdminClient();
+
+  if (!supabase) {
+    return {
+      total: 0,
+      qualified: 0,
+      discoveredToday: 0,
+      byType: {
+        business: 0,
+        professional: 0,
+        learner: 0,
+        unknown: 0,
+      },
+    };
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const [total, qualified, discoveredToday, business, professional, learner, unknown] = await Promise.all([
+    supabase.from("leads").select("id", { count: "exact", head: true }),
+    supabase.from("leads").select("id", { count: "exact", head: true }).gte("lead_score", 50),
+    supabase.from("leads").select("id", { count: "exact", head: true }).gte("discovered_at", today.toISOString()),
+    supabase.from("leads").select("id", { count: "exact", head: true }).eq("lead_type", "business"),
+    supabase.from("leads").select("id", { count: "exact", head: true }).eq("lead_type", "professional"),
+    supabase.from("leads").select("id", { count: "exact", head: true }).eq("lead_type", "learner"),
+    supabase.from("leads").select("id", { count: "exact", head: true }).or("lead_type.eq.unknown,lead_type.is.null"),
+  ]);
+
+  return {
+    total: total.count ?? 0,
+    qualified: qualified.count ?? 0,
+    discoveredToday: discoveredToday.count ?? 0,
+    byType: {
+      business: business.count ?? 0,
+      professional: professional.count ?? 0,
+      learner: learner.count ?? 0,
+      unknown: unknown.count ?? 0,
+    },
+  };
 }
 
 export async function listLeadPipeline(leadId: string): Promise<LeadPipelineItem[]> {

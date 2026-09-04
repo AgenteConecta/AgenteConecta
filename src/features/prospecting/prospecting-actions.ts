@@ -12,6 +12,24 @@ import { runAutomaticQualifiedOutreach } from "@/features/outreach/outreach-acti
 import { getOperationalAppMode } from "@/features/safety/app-mode";
 import { isOperationallyPaused } from "@/features/safety/operation-pause";
 
+export type ProspectingRunSummary = {
+  id: string;
+  status: string;
+  audienceLabel: string;
+  keywords: string[];
+  createdAt: string | null;
+  updatedAt: string | null;
+  lastError: string | null;
+  summary: {
+    discovered?: number;
+    persisted?: number;
+    duplicates?: number;
+    filteredOut?: number;
+    errors?: number;
+    paused?: boolean;
+  } | null;
+};
+
 export async function queueProspectingRun(formData: FormData) {
   const audience = getProspectingAudience(String(formData.get("audience") ?? "auto"));
   const audienceId = String(formData.get("audience") ?? audience.id);
@@ -68,6 +86,8 @@ export async function queueProspectingRun(formData: FormData) {
   }
 
   if (runNow) {
+    await supabase.from("jobs").update({ status: "running", updated_at: new Date().toISOString() }).eq("id", job.id);
+
     const summary = await runProspectingKeywords(keywords, maxProfilesPerKeyword);
     const outreachSummary = autoContact
       ? await runAutomaticQualifiedOutreach({
@@ -155,11 +175,6 @@ async function runProspectingKeywords(keywords: string[], maxProfilesPerKeyword:
         lead,
       );
 
-      if (!hasMinimumIcpSignal(enrichedLead)) {
-        summary.filteredOut += 1;
-        continue;
-      }
-
       const persistence = await persistDiscoveredLead(enrichedLead).catch((error: unknown) => {
         summary.errors += 1;
         summary.errorMessage = error instanceof Error ? error.message : "Erro desconhecido ao salvar lead.";
@@ -173,6 +188,10 @@ async function runProspectingKeywords(keywords: string[], maxProfilesPerKeyword:
 
       generateFirstContactMessage(enrichedLead, persistence.score);
 
+      if (!hasMinimumIcpSignal(enrichedLead)) {
+        summary.filteredOut += 1;
+      }
+
       if (persistence.duplicateLeadId) {
         summary.duplicates += 1;
       } else if (persistence.mode === "persisted") {
@@ -182,6 +201,44 @@ async function runProspectingKeywords(keywords: string[], maxProfilesPerKeyword:
   }
 
   return summary;
+}
+
+export async function listRecentProspectingRuns(): Promise<ProspectingRunSummary[]> {
+  const supabase = getSupabaseAdminClient();
+
+  if (!supabase) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from("jobs")
+    .select("id, status, payload, created_at, updated_at, last_error")
+    .eq("type", "discover_leads")
+    .order("created_at", { ascending: false })
+    .limit(6);
+
+  if (error) {
+    throw error;
+  }
+
+  return (data ?? []).map((job) => {
+    const payload = (job.payload ?? {}) as {
+      audienceLabel?: string;
+      keywords?: string[];
+      summary?: ProspectingRunSummary["summary"];
+    };
+
+    return {
+      id: job.id as string,
+      status: String(job.status ?? "queued"),
+      audienceLabel: payload.audienceLabel ?? "Público não identificado",
+      keywords: Array.isArray(payload.keywords) ? payload.keywords : [],
+      createdAt: (job.created_at as string | null) ?? null,
+      updatedAt: (job.updated_at as string | null) ?? null,
+      lastError: (job.last_error as string | null) ?? null,
+      summary: payload.summary ?? null,
+    };
+  });
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> {

@@ -24,6 +24,7 @@ type SearchParams = Promise<{
   minScore?: string;
   lane?: string;
   status?: string;
+  type?: string;
   selected?: string;
   notice?: string;
 }>;
@@ -199,6 +200,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
     q: params.q,
     minScore: params.minScore ? Number(params.minScore) : undefined,
     status: params.status,
+    leadType: params.type,
   });
 
   const rows = leads
@@ -211,7 +213,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
 
   const selected = rows.find((row) => row.lead.id === params.selected) ?? rows[0] ?? null;
   const selectedApproaches = selected ? generateFirstContactVariants(selected.input, scoreLead(selected.input)) : [];
-  const returnTo = `/leads?q=${params.q ?? ""}&minScore=${params.minScore ?? ""}&lane=${params.lane ?? "all"}&status=${params.status ?? "all"}${selected ? `&selected=${selected.lead.id}` : ""}`;
+  const returnTo = `/leads?q=${params.q ?? ""}&minScore=${params.minScore ?? ""}&lane=${params.lane ?? "all"}&status=${params.status ?? "all"}&type=${params.type ?? "all"}${selected ? `&selected=${selected.lead.id}` : ""}`;
   const pipeline = selected ? await listLeadPipeline(selected.lead.id) : [];
   const counts = rows.reduce(
     (acc, row) => {
@@ -263,7 +265,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
 
       <div className="grid min-h-[calc(100vh-89px)] grid-cols-1 xl:grid-cols-[minmax(680px,1fr)_420px]">
         <section className="border-r border-black/10 px-5 py-5 md:px-8">
-          <form className="grid gap-3 border-b border-black/10 pb-4 md:grid-cols-[1fr_150px_210px_180px_auto]">
+          <form className="grid gap-3 border-b border-black/10 pb-4 md:grid-cols-[1fr_150px_210px_180px_170px_auto]">
             <label className="flex h-10 items-center gap-2 rounded-md border border-black/10 bg-white px-3">
               <Search className="h-4 w-4 text-ink/45" />
               <input className="w-full bg-transparent text-sm outline-none" defaultValue={params.q ?? ""} name="q" placeholder="Buscar username, bio, palavra-chave" />
@@ -298,6 +300,13 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
               <option value="rejected">Descartado</option>
               <option value="do_not_contact">Não contatar</option>
             </select>
+            <select className="h-10 rounded-md border border-black/10 bg-white px-3 text-sm" defaultValue={params.type ?? "all"} name="type">
+              <option value="all">Todos os tipos</option>
+              <option value="business">Empresa</option>
+              <option value="professional">Profissional</option>
+              <option value="learner">Aluno/treinamento</option>
+              <option value="unknown">Indefinido</option>
+            </select>
             <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-pine px-4 text-sm font-medium text-white">
               <Filter className="h-4 w-4" />
               Filtrar
@@ -322,7 +331,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
                   return (
                     <a
                       className={`grid grid-cols-[minmax(230px,1.2fr)_145px_130px_95px_95px_120px_155px_130px] px-4 py-3 text-sm transition hover:bg-mint/45 ${isSelected ? "bg-mint/70" : ""}`}
-                      href={`/leads?q=${params.q ?? ""}&minScore=${params.minScore ?? ""}&lane=${params.lane ?? "all"}&status=${params.status ?? "all"}&selected=${lead.id}`}
+                      href={`/leads?q=${params.q ?? ""}&minScore=${params.minScore ?? ""}&lane=${params.lane ?? "all"}&status=${params.status ?? "all"}&type=${params.type ?? "all"}&selected=${lead.id}`}
                       key={lead.id}
                     >
                       <div className="min-w-0">

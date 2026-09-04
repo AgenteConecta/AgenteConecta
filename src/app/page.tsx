@@ -3,7 +3,9 @@ import {
   BadgeCheck,
   Bot,
   BriefcaseBusiness,
+  Clock3,
   CircleDollarSign,
+  Database,
   Flame,
   Gauge,
   GraduationCap,
@@ -25,8 +27,8 @@ import { ChromeInstagramControls } from "@/components/chrome-instagram-controls"
 import { OperationalModeSwitch } from "@/components/operational-mode-switch";
 import { prospectingAudiences } from "@/features/prospecting/audiences";
 import { ProspectingLauncher } from "@/components/prospecting-launcher";
-import { queueProspectingRun } from "@/features/prospecting/prospecting-actions";
-import { listLeadsForReview } from "@/features/leads/review-repository";
+import { listRecentProspectingRuns, queueProspectingRun, type ProspectingRunSummary } from "@/features/prospecting/prospecting-actions";
+import { getLeadStorageStats, listLeadsForReview, type LeadStorageStats } from "@/features/leads/review-repository";
 import { getApprovedOutreachCount, getAutomaticOutreachCandidateCount, processApprovedOutreach, processAutomaticQualifiedOutreach } from "@/features/outreach/outreach-actions";
 import { getOperationalAppMode } from "@/features/safety/app-mode";
 import { getOperationalPause, resumeAllWork, suspendAllWork } from "@/features/safety/operation-pause";
@@ -176,16 +178,127 @@ function FunnelPreview({ title, lane, leads }: { title: string; lane: Prospectin
   );
 }
 
+function formatDateTime(value?: string | null) {
+  if (!value) {
+    return "-";
+  }
+
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "America/Sao_Paulo",
+  }).format(new Date(value));
+}
+
+function statusTone(status: string) {
+  if (status === "completed") {
+    return "bg-mint text-pine";
+  }
+  if (status === "running" || status === "queued") {
+    return "bg-sky/10 text-sky";
+  }
+  return "bg-coral/10 text-coral";
+}
+
+function LeadStoragePanel({ stats, runs }: { stats: LeadStorageStats; runs: ProspectingRunSummary[] }) {
+  const typeLabels = {
+    business: "Empresas",
+    professional: "Profissionais",
+    learner: "Treinamento",
+    unknown: "Indefinidos",
+  };
+
+  return (
+    <section className="grid gap-4 rounded-lg border border-black/10 bg-white p-5 shadow-panel xl:grid-cols-[360px_1fr]">
+      <div>
+        <div className="flex items-center gap-2 text-sm font-medium text-pine">
+          <Database className="h-4 w-4" />
+          Banco acumulado
+        </div>
+        <h2 className="mt-2 text-xl font-semibold">Leads salvos para campanhas</h2>
+        <div className="mt-4 grid grid-cols-3 gap-2">
+          <div className="rounded-md bg-[#f7f8f5] px-3 py-2">
+            <div className="text-xs text-ink/55">Total</div>
+            <div className="text-2xl font-semibold">{stats.total}</div>
+          </div>
+          <div className="rounded-md bg-[#f7f8f5] px-3 py-2">
+            <div className="text-xs text-ink/55">Qualificados</div>
+            <div className="text-2xl font-semibold">{stats.qualified}</div>
+          </div>
+          <div className="rounded-md bg-[#f7f8f5] px-3 py-2">
+            <div className="text-xs text-ink/55">Hoje</div>
+            <div className="text-2xl font-semibold">{stats.discoveredToday}</div>
+          </div>
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          {Object.entries(stats.byType).map(([type, count]) => (
+            <a className="rounded-md border border-black/10 bg-[#f7f8f5] px-3 py-2 text-sm transition hover:bg-mint/70" href={`/leads?lane=all&status=all&type=${type}`} key={type}>
+              <div className="text-xs text-ink/55">{typeLabels[type as keyof typeof typeLabels]}</div>
+              <div className="text-lg font-semibold">{count}</div>
+            </a>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-sm font-medium text-pine">
+            <Clock3 className="h-4 w-4" />
+            Últimas buscas
+          </div>
+          <a className="text-sm font-semibold text-pine" href="/leads">
+            Abrir leads
+          </a>
+        </div>
+        <div className="overflow-hidden rounded-md border border-black/10">
+          {runs.length > 0 ? (
+            <div className="divide-y divide-black/10">
+              {runs.map((run) => (
+                <div className="grid gap-3 bg-[#f7f8f5] px-3 py-3 md:grid-cols-[1fr_130px_170px]" key={run.id}>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold">{run.audienceLabel}</span>
+                      <span className={`rounded-md px-2 py-1 text-xs font-semibold ${statusTone(run.status)}`}>{run.status}</span>
+                    </div>
+                    <div className="mt-1 truncate text-xs text-ink/55">{run.keywords.join(", ") || "sem palavras-chave"}</div>
+                    {run.lastError ? <div className="mt-1 text-xs font-semibold text-coral">{run.lastError}</div> : null}
+                  </div>
+                  <div className="grid grid-cols-2 gap-1 text-xs text-ink/65">
+                    <span>Achados: {run.summary?.discovered ?? 0}</span>
+                    <span>Novos: {run.summary?.persisted ?? 0}</span>
+                    <span>Repetidos: {run.summary?.duplicates ?? 0}</span>
+                    <span>Erros: {run.summary?.errors ?? 0}</span>
+                  </div>
+                  <div className="text-xs text-ink/55">
+                    <div>Início: {formatDateTime(run.createdAt)}</div>
+                    <div>Atualizado: {formatDateTime(run.updatedAt)}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="bg-[#f7f8f5] px-3 py-4 text-sm text-ink/60">Nenhuma busca registrada ainda.</div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default async function Home({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
   const business = loadBusinessConfig();
-  const [dashboard, approvedOutreachCount, automaticCandidateCount, appMode, pause, allLeads] = await Promise.all([
+  const [dashboard, approvedOutreachCount, automaticCandidateCount, appMode, pause, allLeads, leadStorageStats, recentProspectingRuns] = await Promise.all([
     getDashboardData(),
     getApprovedOutreachCount(),
     getAutomaticOutreachCandidateCount(),
     getOperationalAppMode(),
     getOperationalPause(),
     listLeadsForReview({}),
+    getLeadStorageStats(),
+    listRecentProspectingRuns(),
   ]);
   const hotLead = dashboard.hotLead;
   const hotLeadInput = hotLead
@@ -274,6 +387,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
 
         <div className="space-y-6 px-5 py-6 md:px-8">
           <ProspectingLauncher action={queueProspectingRun} audiences={prospectingAudiences} />
+          <LeadStoragePanel stats={leadStorageStats} runs={recentProspectingRuns} />
 
           <section className="grid gap-4 rounded-lg border border-black/10 bg-white p-5 shadow-panel lg:grid-cols-[1fr_360px]">
             <div>

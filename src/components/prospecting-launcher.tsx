@@ -2,6 +2,7 @@
 
 import { Plus, Search } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useFormStatus } from "react-dom";
 import type { ProspectingAudience } from "@/features/prospecting/audiences";
 
 type EditableAudience = ProspectingAudience & {
@@ -20,6 +21,27 @@ function slugify(input: string) {
     .replace(/[^a-zA-Z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "")
     .toLowerCase();
+}
+
+function ProspectingSubmitStatus() {
+  const { pending } = useFormStatus();
+
+  return (
+    <>
+      {pending ? (
+        <div className="rounded-md border border-sky/25 bg-sky/10 px-3 py-3 text-sm font-semibold leading-6 text-ink">
+          Buscando perfis no Instagram, qualificando e salvando no banco. Aguarde a conclusão antes de iniciar outra busca.
+        </div>
+      ) : null}
+      <button
+        className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-pine px-4 text-sm font-medium text-white transition hover:brightness-95 active:scale-[0.99] disabled:opacity-65"
+        disabled={pending}
+      >
+        <Search className="h-4 w-4" />
+        {pending ? "Pesquisa em andamento..." : "Pesquisar, qualificar e processar lote"}
+      </button>
+    </>
+  );
 }
 
 export function ProspectingLauncher({ action, audiences }: ProspectingLauncherProps) {
@@ -198,10 +220,7 @@ export function ProspectingLauncher({ action, audiences }: ProspectingLauncherPr
           <input className="h-4 w-4 accent-pine" defaultChecked name="runNow" type="checkbox" />
           Executar agora no Chrome conectado
         </label>
-        <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-pine px-4 text-sm font-medium text-white transition hover:brightness-95 active:scale-[0.99]">
-          <Search className="h-4 w-4" />
-          Pesquisar, qualificar e processar lote
-        </button>
+        <ProspectingSubmitStatus />
         <div className="rounded-md bg-[#f7f8f5] px-3 py-2 text-xs leading-5 text-ink/60">
           Em dry-run, o sistema pesquisa e registra leads para revisão. Nenhuma DM é enviada.
         </div>

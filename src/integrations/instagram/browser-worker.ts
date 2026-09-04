@@ -83,8 +83,8 @@ export async function checkInstagramSession(): Promise<{
   const page = await context.newPage();
 
   try {
-    await page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 30000 });
-    await page.waitForTimeout(2500);
+    await page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 8000 });
+    await page.waitForTimeout(1000);
 
     const state = await page.evaluate(() => {
       const text = document.body.textContent?.toLowerCase() ?? "";

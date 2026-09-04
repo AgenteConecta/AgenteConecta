@@ -90,7 +90,22 @@ export async function openInstagramInConnectedChrome() {
 
 export async function getChromeInstagramStatus() {
   try {
-    return await checkInstagramSession();
+    return await Promise.race([
+      checkInstagramSession(),
+      new Promise<Awaited<ReturnType<typeof checkInstagramSession>>>((resolve) => {
+        setTimeout(
+          () =>
+            resolve({
+              connected: false,
+              loggedIn: false,
+              title: "",
+              url: "",
+              reason: "A verificação demorou demais. Clique em Conectar Chrome ou Abrir Instagram.",
+            }),
+          10000,
+        );
+      }),
+    ]);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const isConnectionError =

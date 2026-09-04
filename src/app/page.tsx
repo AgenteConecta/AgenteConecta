@@ -34,7 +34,7 @@ import { getOperationalAppMode } from "@/features/safety/app-mode";
 import { getOperationalPause, resumeAllWork, suspendAllWork } from "@/features/safety/operation-pause";
 import { identifyProspectingLane, type ProspectingLane } from "@/features/prospecting/prospecting-lane";
 import { scoreLead } from "@/features/scoring/scoring";
-import type { DashboardLead } from "@/features/analytics/dashboard-data";
+import type { DashboardData, DashboardLead } from "@/features/analytics/dashboard-data";
 
 type SearchParams = Promise<{
   notice?: string;
@@ -287,18 +287,49 @@ function LeadStoragePanel({ stats, runs }: { stats: LeadStorageStats; runs: Pros
   );
 }
 
+const emptyDashboard: DashboardData = {
+  connected: false,
+  metrics: {
+    leadsDiscoveredToday: 0,
+    qualifiedLeads: 0,
+    dmsSent: 0,
+    responses: 0,
+    whatsappStarted: 0,
+    trainingSales: 0,
+    credentialingSales: 0,
+    credentialedPartners: 0,
+    activeResellers: 0,
+    attributedRevenue: 0,
+    openAiCost: 0,
+  },
+  hotLead: null,
+  recentLeads: [],
+};
+
+const emptyLeadStorageStats: LeadStorageStats = {
+  total: 0,
+  qualified: 0,
+  discoveredToday: 0,
+  byType: {
+    business: 0,
+    professional: 0,
+    learner: 0,
+    unknown: 0,
+  },
+};
+
 export default async function Home({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
   const business = loadBusinessConfig();
   const [dashboard, approvedOutreachCount, automaticCandidateCount, appMode, pause, allLeads, leadStorageStats, recentProspectingRuns] = await Promise.all([
-    getDashboardData(),
-    getApprovedOutreachCount(),
-    getAutomaticOutreachCandidateCount(),
-    getOperationalAppMode(),
-    getOperationalPause(),
-    listLeadsForReview({}),
-    getLeadStorageStats(),
-    listRecentProspectingRuns(),
+    getDashboardData().catch(() => emptyDashboard),
+    getApprovedOutreachCount().catch(() => 0),
+    getAutomaticOutreachCandidateCount().catch(() => 0),
+    getOperationalAppMode().catch(() => "dry_run" as const),
+    getOperationalPause().catch(() => ({ paused: false, reason: "Sem pausa operacional", source: "none" as const })),
+    listLeadsForReview({}).catch(() => []),
+    getLeadStorageStats().catch(() => emptyLeadStorageStats),
+    listRecentProspectingRuns().catch(() => []),
   ]);
   const hotLead = dashboard.hotLead;
   const hotLeadInput = hotLead

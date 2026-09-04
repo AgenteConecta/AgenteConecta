@@ -37,6 +37,12 @@ export function ChromeInstagramControls() {
       const payload = (await response.json().catch(() => ({}))) as StatusPayload;
       setStatus(payload.status ?? unknownStatus);
       setMessage(payload.status?.loggedIn ? "Chrome conectado e Instagram logado." : (payload.status?.reason ?? null));
+    } catch {
+      setStatus({
+        ...unknownStatus,
+        reason: "Não foi possível verificar o Chrome agora.",
+      });
+      setMessage("Não foi possível verificar o Chrome agora.");
     } finally {
       setLoading(null);
     }
@@ -51,6 +57,8 @@ export function ChromeInstagramControls() {
       const payload = (await response.json().catch(() => ({}))) as StatusPayload;
       setMessage(payload.message ?? (response.ok ? "Chrome aberto." : "Não foi possível abrir o Chrome."));
       window.setTimeout(() => void readStatus(), 1800);
+    } catch {
+      setMessage("Não foi possível abrir o Chrome pelo aplicativo.");
     } finally {
       setLoading(null);
     }
@@ -65,6 +73,8 @@ export function ChromeInstagramControls() {
       const payload = (await response.json().catch(() => ({}))) as StatusPayload;
       setStatus(payload.status ?? status);
       setMessage(payload.message ?? (response.ok ? "Instagram aberto." : "Não foi possível abrir o Instagram."));
+    } catch {
+      setMessage("Não foi possível abrir o Instagram pelo aplicativo.");
     } finally {
       setLoading(null);
     }

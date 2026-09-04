@@ -51,7 +51,7 @@ export async function suspendAllWork() {
     redirectWithNotice("Supabase não está configurado. Não foi possível suspender.");
   }
 
-  await supabase.from("settings").upsert({
+  const { error: settingsError } = await supabase.from("settings").upsert({
     key: "master_pause",
     value: {
       paused: true,
@@ -61,7 +61,11 @@ export async function suspendAllWork() {
     updated_at: new Date().toISOString(),
   });
 
-  await supabase
+  if (settingsError) {
+    redirectWithNotice(`Erro ao suspender: ${settingsError.message}`);
+  }
+
+  const { error: jobsError } = await supabase
     .from("jobs")
     .update({
       status: "cancelled",
@@ -70,6 +74,10 @@ export async function suspendAllWork() {
     })
     .in("status", ["queued", "running"])
     .in("type", ["discover_leads", "send_instagram_dm", "schedule_followup"]);
+
+  if (jobsError) {
+    redirectWithNotice(`Pausa ativada, mas houve erro ao cancelar jobs: ${jobsError.message}`);
+  }
 
   revalidatePath("/");
   revalidatePath("/leads");
@@ -83,7 +91,7 @@ export async function resumeAllWork() {
     redirectWithNotice("Supabase não está configurado. Não foi possível retomar.");
   }
 
-  await supabase.from("settings").upsert({
+  const { error } = await supabase.from("settings").upsert({
     key: "master_pause",
     value: {
       paused: false,
@@ -92,6 +100,10 @@ export async function resumeAllWork() {
     },
     updated_at: new Date().toISOString(),
   });
+
+  if (error) {
+    redirectWithNotice(`Erro ao retomar: ${error.message}`);
+  }
 
   revalidatePath("/");
   revalidatePath("/leads");

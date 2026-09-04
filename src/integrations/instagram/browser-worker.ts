@@ -30,6 +30,10 @@ export function hashtagUrl(keyword: string): string {
   return `https://www.instagram.com/explore/tags/${tag}/`;
 }
 
+export function searchUrl(keyword: string): string {
+  return `https://www.instagram.com/explore/search/keyword/?q=${encodeURIComponent(keyword)}`;
+}
+
 export function parseInstagramFollowerCount(input: string): number | undefined {
   const match = input.match(/([\d.,]+)\s*([kKmM]?)\s*(?:followers|seguidores)/i);
 
@@ -123,50 +127,79 @@ export async function discoverProfilesFromHashtag(params: {
 
   const context = browser.contexts()[0] ?? (await browser.newContext());
   const page = await context.newPage();
-  const url = hashtagUrl(params.keyword);
-  assertInstagramUrl(url);
+  const urls = [hashtagUrl(params.keyword), searchUrl(params.keyword)];
+  urls.forEach(assertInstagramUrl);
 
   try {
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 });
-    await page.waitForTimeout(3500);
-
-    const loggedOut = await page.evaluate(() => {
-      const text = document.body.textContent?.toLowerCase() ?? "";
-      return text.includes("criar nova conta") || text.includes("sign up") || text.includes("log in");
-    });
-
-    if (loggedOut) {
-      throw new Error("Instagram session is not logged in for the Chrome CDP profile.");
-    }
-
-    const postUrls = await page.evaluate((limit) => {
-      return Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href^="/p/"], a[href^="/reel/"]'))
-        .map((anchor) => anchor.href)
-        .filter((href, index, all) => all.indexOf(href) === index)
-        .slice(0, limit);
-    }, params.maxProfiles);
-
     const usernames: string[] = [];
 
-    for (const postUrl of postUrls) {
-      assertInstagramUrl(postUrl);
-      await page.goto(postUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
-      await page.waitForTimeout(1800);
+    for (const url of urls) {
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 });
+      await page.waitForTimeout(3500);
 
-      const username = await page.evaluate(() => {
-        const blocked = new Set(["explore", "p", "reel", "reels", "accounts", "about", "direct"]);
-        const candidates = Array.from(document.querySelectorAll<HTMLAnchorElement>('article a[href^="/"], header a[href^="/"]'))
+      const loggedOut = await page.evaluate(() => {
+        const text = document.body.textContent?.toLowerCase() ?? "";
+        return text.includes("criar nova conta") || text.includes("sign up") || text.includes("log in");
+      });
+
+      if (loggedOut) {
+        throw new Error("Instagram session is not logged in for the Chrome CDP profile.");
+      }
+
+      const visibleUsernames = await page.evaluate((limit) => {
+        const blocked = new Set(["explore", "p", "reel", "reels", "accounts", "about", "direct", "legal", "privacy", "web", "popular"]);
+        return Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href^="/"]'))
           .map((anchor) => anchor.getAttribute("href") ?? "")
           .map((href) => href.split("/").filter(Boolean)[0] ?? "")
           .filter((segment) => /^[a-zA-Z0-9._]{2,30}$/.test(segment))
           .filter((segment) => !blocked.has(segment))
-          .filter((segment) => !["legal", "privacy", "web", "popular"].includes(segment));
+          .filter((segment, index, all) => all.indexOf(segment) === index)
+          .slice(0, limit);
+      }, params.maxProfiles * 2);
 
-        return candidates[0] ?? null;
-      });
+      for (const username of visibleUsernames) {
+        if (!usernames.includes(username)) {
+          usernames.push(username);
+        }
+        if (usernames.length >= params.maxProfiles) {
+          break;
+        }
+      }
 
-      if (username && !usernames.includes(username)) {
-        usernames.push(username);
+      if (usernames.length >= params.maxProfiles) {
+        break;
+      }
+
+      const postUrls = await page.evaluate((limit) => {
+        return Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href^="/p/"], a[href^="/reel/"]'))
+          .map((anchor) => anchor.href)
+          .filter((href, index, all) => all.indexOf(href) === index)
+          .slice(0, limit);
+      }, params.maxProfiles);
+
+      for (const postUrl of postUrls) {
+        assertInstagramUrl(postUrl);
+        await page.goto(postUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
+        await page.waitForTimeout(1800);
+
+        const username = await page.evaluate(() => {
+          const blocked = new Set(["explore", "p", "reel", "reels", "accounts", "about", "direct"]);
+          const candidates = Array.from(document.querySelectorAll<HTMLAnchorElement>('article a[href^="/"], header a[href^="/"]'))
+            .map((anchor) => anchor.getAttribute("href") ?? "")
+            .map((href) => href.split("/").filter(Boolean)[0] ?? "")
+            .filter((segment) => /^[a-zA-Z0-9._]{2,30}$/.test(segment))
+            .filter((segment) => !blocked.has(segment))
+            .filter((segment) => !["legal", "privacy", "web", "popular"].includes(segment));
+
+          return candidates[0] ?? null;
+        });
+
+        if (username && !usernames.includes(username)) {
+          usernames.push(username);
+        }
+        if (usernames.length >= params.maxProfiles) {
+          break;
+        }
       }
     }
 

@@ -82,14 +82,28 @@ export async function queueProspectingRun(formData: FormData) {
       .update({
         status: summary.paused ? "cancelled" : summary.errors > 0 && summary.persisted === 0 ? "dead" : "completed",
         last_error: summary.paused ? "Suspenso pela pausa operacional" : summary.errorMessage,
+        payload: {
+          audienceId,
+          audienceLabel,
+          keywords,
+          maxProfilesPerKeyword,
+          autoContact,
+          minScore,
+          minFollowers,
+          batchSize,
+          source: "dashboard",
+          dryRun: appMode === "dry_run",
+          summary,
+        },
         updated_at: new Date().toISOString(),
       })
       .eq("id", job.id);
 
     revalidatePath("/");
     revalidatePath("/leads");
+    const emptyReason = summary.discovered === 0 ? " Nenhum perfil foi capturado no Instagram para essas buscas; tente palavras mais amplas ou verifique se o Chrome logado está carregando resultados." : "";
     redirectWithNotice(
-      `Prospecção concluída: ${summary.discovered} encontrados, ${summary.persisted} novos, ${summary.duplicates} reencontrados/atualizados, ${summary.filteredOut} filtrados, ${summary.errors} erros. Contato automático: ${outreachSummary.prepared} criados, ${outreachSummary.processed} processados.`,
+      `Prospecção concluída: ${summary.discovered} encontrados, ${summary.persisted} novos, ${summary.duplicates} reencontrados/atualizados, ${summary.filteredOut} filtrados, ${summary.errors} erros. Contato automático: ${outreachSummary.prepared} criados, ${outreachSummary.processed} processados.${emptyReason}`,
     );
   }
 
@@ -105,6 +119,7 @@ async function runProspectingKeywords(keywords: string[], maxProfilesPerKeyword:
     filteredOut: 0,
     errors: 0,
     paused: false,
+    diagnostics: [] as string[],
     errorMessage: null as string | null,
   };
 
@@ -121,6 +136,7 @@ async function runProspectingKeywords(keywords: string[], maxProfilesPerKeyword:
     });
 
     summary.discovered += discovered.length;
+    summary.diagnostics.push(`${keyword}: ${discovered.length} perfil(is) encontrado(s)`);
 
     for (const lead of discovered) {
       if (await isOperationallyPaused()) {

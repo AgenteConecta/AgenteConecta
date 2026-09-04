@@ -1,7 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSupabaseAdminClient } from "@/integrations/supabase/client";
-import { env } from "@/lib/env";
+import { getOperationalAppMode } from "@/features/safety/app-mode";
 import type { DashboardLead } from "@/features/analytics/dashboard-data";
 
 export type LeadReviewFilters = {
@@ -113,6 +113,7 @@ export async function listLeadPipeline(leadId: string): Promise<LeadPipelineItem
 export async function approveLeadForOutreach(formData: FormData) {
   "use server";
 
+  const appMode = await getOperationalAppMode();
   const leadId = String(formData.get("leadId") ?? "");
   const lane = String(formData.get("lane") ?? "review");
   const username = String(formData.get("username") ?? "");
@@ -164,7 +165,7 @@ export async function approveLeadForOutreach(formData: FormData) {
   }
 
   const messageBody = approvedMessage || `Abordagem aprovada para ${username}.`;
-  const messageResult = env.appMode === "dry_run" || env.appMode === "simulation" ? "dry_run_prepared_not_sent" : "queued_for_operator_confirmation";
+  const messageResult = appMode === "dry_run" || appMode === "simulation" ? "dry_run_prepared_not_sent" : "queued_for_operator_confirmation";
   const { error: messageError } = await supabase.from("messages").insert({
     conversation_id: conversation.data.id,
     lead_id: leadId,
@@ -198,13 +199,13 @@ export async function approveLeadForOutreach(formData: FormData) {
     lead_id: leadId,
     event_type: "outreach_message_prepared",
     summary:
-      env.appMode === "dry_run" || env.appMode === "simulation"
+      appMode === "dry_run" || appMode === "simulation"
         ? `Mensagem de abordagem preparada para ${username}; envio bloqueado pelo modo dry-run.`
         : `Mensagem de abordagem preparada para ${username}; aguardando confirmação operacional.`,
     payload: {
       lane,
       channel: "instagram",
-      appMode: env.appMode,
+      appMode,
     },
   });
 

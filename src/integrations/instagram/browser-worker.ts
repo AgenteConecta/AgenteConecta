@@ -1,5 +1,6 @@
 import { chromium, type Browser } from "playwright";
 import { env } from "@/lib/env";
+import { getOperationalAppMode } from "@/features/safety/app-mode";
 import type { LeadProfileInput } from "@/lib/types";
 
 const allowedHosts = new Set(["instagram.com", "www.instagram.com"]);
@@ -12,7 +13,7 @@ export function assertInstagramUrl(url: string): void {
 }
 
 export async function connectInstagramBrowser(): Promise<Browser | null> {
-  if (env.appMode === "simulation") {
+  if ((await getOperationalAppMode()) === "simulation") {
     return null;
   }
 
@@ -245,8 +246,9 @@ export async function sendInitialInstagramDm(params: {
   idempotencyKey: string;
 }) {
   assertInstagramUrl(params.profileUrl);
+  const appMode = await getOperationalAppMode();
 
-  if (env.appMode !== "pilot" && env.appMode !== "production") {
+  if (appMode !== "pilot" && appMode !== "production") {
     return {
       result: "dry_run_blocked",
       pageUrl: params.profileUrl,

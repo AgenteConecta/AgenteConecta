@@ -1,4 +1,5 @@
 import { env, integrationReady, normalizeBaseUrl } from "@/lib/env";
+import { getOperationalAppMode } from "@/features/safety/app-mode";
 
 export type EvolutionSendMessageInput = {
   leadId: string;
@@ -12,11 +13,13 @@ export type EvolutionSendMessageResult = {
   externalId: string | null;
 };
 
-export function getEvolutionStatus() {
+export async function getEvolutionStatus() {
+  const appMode = await getOperationalAppMode();
+
   return {
     configured: integrationReady(env.evolutionApiUrl, env.evolutionApiKey, env.evolutionInstance),
-    mode: env.appMode,
-    liveSendEnabled: env.appMode === "production",
+    mode: appMode,
+    liveSendEnabled: appMode === "production",
     instanceConfigured: Boolean(env.evolutionInstance),
   };
 }
@@ -35,8 +38,9 @@ export function encodeEvolutionInstance(instance: string): string {
 
 export async function sendEvolutionMessage(input: EvolutionSendMessageInput): Promise<EvolutionSendMessageResult> {
   const ready = integrationReady(env.evolutionApiUrl, env.evolutionApiKey, env.evolutionInstance);
+  const appMode = await getOperationalAppMode();
 
-  if (env.appMode !== "production" || !ready) {
+  if (appMode !== "production" || !ready) {
     return {
       provider: "evolution",
       mode: "dry_run",

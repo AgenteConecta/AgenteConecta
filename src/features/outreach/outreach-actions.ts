@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { generateFirstContactMessage } from "@/features/conversations/first-contact";
 import { sendInitialInstagramDm } from "@/integrations/instagram/browser-worker";
 import { getSupabaseAdminClient } from "@/integrations/supabase/client";
-import { env } from "@/lib/env";
+import { getOperationalAppMode } from "@/features/safety/app-mode";
 import { isOperationallyPaused } from "@/features/safety/operation-pause";
 import type { LeadProfileInput, LeadScoreResult } from "@/lib/types";
 
@@ -87,6 +87,7 @@ export async function getAutomaticOutreachCandidateCount() {
 export async function processApprovedOutreach(formData: FormData) {
   const maxMessagesRaw = Number(formData.get("maxMessages") ?? 5);
   const maxMessages = normalizeBatchSize(maxMessagesRaw);
+  const appMode = await getOperationalAppMode();
 
   if (await isOperationallyPaused()) {
     redirectWithNotice("Pausa geral ativa. Nenhum contato foi processado.");
@@ -169,7 +170,7 @@ export async function processApprovedOutreach(formData: FormData) {
           messageId: message.id,
           pageUrl: result.pageUrl,
           result: result.result,
-          appMode: env.appMode,
+          appMode,
         },
       });
 
@@ -183,7 +184,7 @@ export async function processApprovedOutreach(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/leads");
-  redirectWithNotice(`Envio processado: ${processed} preparados, ${blocked} bloqueados, ${failed} falhas. Modo atual: ${env.appMode}.`);
+  redirectWithNotice(`Envio processado: ${processed} preparados, ${blocked} bloqueados, ${failed} falhas. Modo atual: ${appMode}.`);
 }
 
 export async function processAutomaticQualifiedOutreach(formData: FormData) {
@@ -220,6 +221,7 @@ export async function runAutomaticQualifiedOutreach({
   minFollowers: number;
   maxMessages: number;
 }) {
+  const appMode = await getOperationalAppMode();
   const supabase = getSupabaseAdminClient();
 
   if (!supabase) {
@@ -291,7 +293,7 @@ export async function runAutomaticQualifiedOutreach({
         payload: {
           minScore,
           minFollowers,
-          appMode: env.appMode,
+          appMode,
         },
       });
     }
@@ -306,6 +308,7 @@ export async function runAutomaticQualifiedOutreach({
 
 async function markMessageResult(messageId: string, leadId: string, result: string, summary: string) {
   const supabase = getSupabaseAdminClient();
+  const appMode = await getOperationalAppMode();
 
   if (!supabase) {
     return;
@@ -319,13 +322,14 @@ async function markMessageResult(messageId: string, leadId: string, result: stri
     payload: {
       messageId,
       result,
-      appMode: env.appMode,
+      appMode,
     },
   });
 }
 
 async function createAutomaticOutreachMessage(lead: QualifiedLeadRow, followers: number, minScore: number, minFollowers: number) {
   const supabase = getSupabaseAdminClient();
+  const appMode = await getOperationalAppMode();
 
   if (!supabase) {
     throw new Error("Supabase is not configured");
@@ -361,7 +365,7 @@ async function createAutomaticOutreachMessage(lead: QualifiedLeadRow, followers:
       direction: "outbound",
       body: message,
       message_variant: "first_contact_auto_qualified",
-      result: env.appMode === "dry_run" || env.appMode === "simulation" ? "dry_run_prepared_not_sent" : "queued_for_operator_confirmation",
+      result: appMode === "dry_run" || appMode === "simulation" ? "dry_run_prepared_not_sent" : "queued_for_operator_confirmation",
     })
     .select("id")
     .single();
@@ -388,7 +392,7 @@ async function createAutomaticOutreachMessage(lead: QualifiedLeadRow, followers:
       followers,
       minScore,
       minFollowers,
-      appMode: env.appMode,
+      appMode,
     },
   });
 
@@ -397,6 +401,7 @@ async function createAutomaticOutreachMessage(lead: QualifiedLeadRow, followers:
 
 async function processMessageById(messageId: string) {
   const supabase = getSupabaseAdminClient();
+  const appMode = await getOperationalAppMode();
 
   if (!supabase) {
     return "failed";
@@ -453,7 +458,7 @@ async function processMessageById(messageId: string) {
         messageId: message.id,
         result: result.result,
         pageUrl: result.pageUrl,
-        appMode: env.appMode,
+        appMode,
       },
     });
 

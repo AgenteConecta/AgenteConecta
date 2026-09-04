@@ -3,13 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSupabaseAdminClient } from "@/integrations/supabase/client";
-import { env } from "@/lib/env";
 import { getProspectingAudience, parseCustomKeywords } from "@/features/prospecting/audiences";
 import { generateFirstContactMessage } from "@/features/conversations/first-contact";
 import { persistDiscoveredLead } from "@/features/leads/lead-repository";
 import { hasMinimumIcpSignal } from "@/features/prospecting/icp-filter";
 import { discoverProfilesFromHashtag, readInstagramPublicProfile } from "@/integrations/instagram/browser-worker";
 import { runAutomaticQualifiedOutreach } from "@/features/outreach/outreach-actions";
+import { getOperationalAppMode } from "@/features/safety/app-mode";
 import { isOperationallyPaused } from "@/features/safety/operation-pause";
 
 export async function queueProspectingRun(formData: FormData) {
@@ -28,6 +28,7 @@ export async function queueProspectingRun(formData: FormData) {
   const minScore = Math.max(0, Math.min(Number.isFinite(minScoreRaw) ? minScoreRaw : 70, 100));
   const minFollowers = Math.max(0, Math.min(Number.isFinite(minFollowersRaw) ? minFollowersRaw : 10000, 10_000_000));
   const batchSize = normalizeBatchSize(batchSizeRaw);
+  const appMode = await getOperationalAppMode();
 
   if (await isOperationallyPaused()) {
     redirectWithNotice("Master pause ativo. Desative a pausa antes de iniciar uma nova prospecção.");
@@ -56,7 +57,7 @@ export async function queueProspectingRun(formData: FormData) {
         minFollowers,
         batchSize,
         source: "dashboard",
-        dryRun: env.appMode === "dry_run",
+        dryRun: appMode === "dry_run",
       },
     },
     { onConflict: "idempotency_key" },

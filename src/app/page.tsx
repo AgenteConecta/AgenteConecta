@@ -388,6 +388,14 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
                     <div className="text-sm font-medium text-ink/70">Primeira abordagem gerada</div>
                     <p className="mt-2 text-sm leading-6">{firstMessage}</p>
                   </div>
+                  {hotLead ? (
+                    <a
+                      className="mt-4 inline-flex h-10 items-center justify-center rounded-md bg-pine px-4 text-sm font-medium text-white transition hover:brightness-95"
+                      href={`/leads?selected=${hotLead.id}`}
+                    >
+                      Abrir ficha do lead
+                    </a>
+                  ) : null}
                 </div>
                 <div className="grid grid-cols-2 gap-3 md:grid-cols-1">
                   <div className="rounded-md bg-mint p-4">
@@ -402,10 +410,17 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
               </div>
               <div className="mt-5 grid gap-2 sm:grid-cols-2">
                 {dashboard.recentLeads.slice(0, 6).map((lead) => (
-                  <div key={lead.id} className="flex items-center justify-between rounded-md border border-black/10 px-3 py-2 text-sm">
-                    <span>@{lead.instagram_username}</span>
+                  <a
+                    className="flex items-center justify-between rounded-md border border-black/10 px-3 py-2 text-sm transition hover:border-pine/30 hover:bg-mint/70"
+                    href={`/leads?selected=${lead.id}`}
+                    key={lead.id}
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate">@{lead.instagram_username}</span>
+                      <span className="block truncate text-xs text-ink/45">{lead.discovery_keyword ?? "sem busca"}</span>
+                    </span>
                     <span className="font-semibold text-pine">{lead.lead_score ?? 0}/{lead.commercial_value_score ?? 0}</span>
-                  </div>
+                  </a>
                 ))}
               </div>
             </div>

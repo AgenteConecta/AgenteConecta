@@ -19,6 +19,25 @@ export type LeadPipelineItem = {
   createdAt: string | null;
 };
 
+type LeadProfileRow = {
+  lead_id: string;
+  public_snapshot: {
+    followers?: number | string | null;
+    discoveryKeyword?: string | null;
+  } | null;
+  analyzed_at: string | null;
+  created_at: string | null;
+};
+
+type ProspectingEventRow = {
+  lead_id: string | null;
+  event_type: string;
+  created_at: string | null;
+  payload: {
+    discoveryKeyword?: string | null;
+  } | null;
+};
+
 export async function listLeadsForReview(filters: LeadReviewFilters): Promise<DashboardLead[]> {
   const supabase = getSupabaseAdminClient();
 
@@ -28,8 +47,8 @@ export async function listLeadsForReview(filters: LeadReviewFilters): Promise<Da
 
   let query = supabase
     .from("leads")
-    .select("id, instagram_username, display_name, bio, city, state, lead_type, market_awareness, lead_score, commercial_value_score, discovery_keyword, discovered_at, channel_state, do_not_contact, human_review_required")
-    .order("discovered_at", { ascending: false })
+    .select("id, instagram_username, display_name, bio, city, state, lead_type, market_awareness, lead_score, commercial_value_score, discovery_keyword, discovered_at, updated_at, channel_state, do_not_contact, human_review_required")
+    .order("updated_at", { ascending: false })
     .limit(100);
 
   if (filters.minScore) {
@@ -47,7 +66,61 @@ export async function listLeadsForReview(filters: LeadReviewFilters): Promise<Da
     throw error;
   }
 
-  return (data ?? []) as DashboardLead[];
+  const leadRows = (data ?? []) as DashboardLead[];
+  const leadIds = leadRows.map((lead) => lead.id);
+
+  if (leadIds.length === 0) {
+    return [];
+  }
+
+  const [profiles, events] = await Promise.all([
+    supabase
+      .from("lead_profiles")
+      .select("lead_id, public_snapshot, analyzed_at, created_at")
+      .in("lead_id", leadIds)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("lead_events")
+      .select("lead_id, event_type, created_at, payload")
+      .in("lead_id", leadIds)
+      .in("event_type", ["discovered_on_instagram", "rediscovered_on_instagram"])
+      .order("created_at", { ascending: false }),
+  ]);
+
+  const latestProfileByLead = new Map<string, LeadProfileRow>();
+  for (const profile of ((profiles.data ?? []) as LeadProfileRow[])) {
+    if (!latestProfileByLead.has(profile.lead_id)) {
+      latestProfileByLead.set(profile.lead_id, profile);
+    }
+  }
+
+  const prospectingByLead = new Map<string, { count: number; last: string | null; keyword: string | null }>();
+  for (const event of ((events.data ?? []) as ProspectingEventRow[])) {
+    if (!event.lead_id) {
+      continue;
+    }
+
+    const current = prospectingByLead.get(event.lead_id) ?? { count: 0, last: null, keyword: null };
+    prospectingByLead.set(event.lead_id, {
+      count: current.count + 1,
+      last: current.last ?? event.created_at,
+      keyword: current.keyword ?? event.payload?.discoveryKeyword ?? null,
+    });
+  }
+
+  return leadRows.map((lead) => {
+    const profile = latestProfileByLead.get(lead.id);
+    const prospecting = prospectingByLead.get(lead.id);
+    const followers = Number(profile?.public_snapshot?.followers ?? 0);
+
+    return {
+      ...lead,
+      followers: Number.isFinite(followers) && followers > 0 ? followers : null,
+      last_prospected_at: prospecting?.last ?? profile?.analyzed_at ?? lead.discovered_at,
+      prospecting_count: prospecting?.count ?? 0,
+      latest_discovery_keyword: prospecting?.keyword ?? profile?.public_snapshot?.discoveryKeyword ?? lead.discovery_keyword,
+    };
+  });
 }
 
 export async function listLeadPipeline(leadId: string): Promise<LeadPipelineItem[]> {

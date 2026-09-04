@@ -24,10 +24,16 @@ const menu = [
 export function AppShell({
   active,
   children,
+  operationMode = "dry_run",
 }: Readonly<{
   active: string;
   children: React.ReactNode;
+  operationMode?: string;
 }>) {
+  const isLive = operationMode === "pilot" || operationMode === "production";
+  const operationLabel = operationMode === "pilot" ? "Piloto ativo" : operationMode === "production" ? "Produção ativa" : "Dry-run ativo";
+  const operationDetail = isLive ? "CRM ligado. Contato real preparado conforme regras." : "Leitura e CRM ligados. Envio real bloqueado.";
+
   return (
     <main className="min-h-screen bg-[#f7f8f5] text-ink">
       <header className="sticky top-0 z-20 border-b border-black/10 bg-white px-4 py-3 lg:hidden">
@@ -37,7 +43,7 @@ export function AppShell({
           </div>
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold">Newtek Sales Engine</div>
-            <div className="text-xs text-ink/55">Dry-run ativo</div>
+            <div className="text-xs text-ink/55">{operationLabel}</div>
           </div>
         </div>
         <nav className="mt-3 flex gap-2 overflow-x-auto pb-1">
@@ -73,8 +79,8 @@ export function AppShell({
         </div>
         <div className="mb-4 rounded-lg border border-black/10 bg-[#f7f8f5] p-3">
           <div className="text-xs font-medium uppercase text-ink/45">Operação</div>
-          <div className="mt-2 text-sm font-semibold text-ink">Dry-run ativo</div>
-          <div className="mt-1 text-xs leading-5 text-ink/60">Leitura e CRM ligados. Envio real bloqueado.</div>
+          <div className="mt-2 text-sm font-semibold text-ink">{operationLabel}</div>
+          <div className="mt-1 text-xs leading-5 text-ink/60">{operationDetail}</div>
         </div>
         <nav className="space-y-1">
           {menu.map(([item, href]) =>

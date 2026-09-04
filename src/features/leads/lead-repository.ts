@@ -48,6 +48,66 @@ export async function persistDiscoveredLead(input: LeadProfileInput): Promise<Pe
   );
 
   if (duplicate) {
+    const now = new Date().toISOString();
+    await supabase
+      .from("leads")
+      .update({
+        display_name: input.displayName,
+        bio: input.bio,
+        category: input.category,
+        city: input.city,
+        state: input.state,
+        country: input.country ?? "Brasil",
+        website: input.website,
+        business_type: score.businessType,
+        estimated_role: score.estimatedRole,
+        market_awareness: score.marketAwareness,
+        lead_type: score.leadType,
+        lead_score: score.leadScore,
+        commercial_value_score: score.commercialValueScore,
+        geography_tier: score.geographyTier,
+        territory_opportunity_score: score.territoryOpportunityScore,
+        project_readiness: score.projectReadiness,
+        discovery_source: input.discoverySource,
+        discovery_keyword: input.discoveryKeyword,
+        updated_at: now,
+      })
+      .eq("id", duplicate.id);
+
+    await supabase.from("lead_scores").insert({
+      lead_id: duplicate.id,
+      raw_lead_score: score.rawLeadScore,
+      lead_score: score.leadScore,
+      commercial_value_score: score.commercialValueScore,
+      explanation: score.scoreExplanation,
+      commercial_explanation: score.commercialExplanation,
+    });
+
+    await supabase.from("lead_profiles").insert({
+      lead_id: duplicate.id,
+      public_snapshot: {
+        followers: input.followers ?? null,
+        category: input.category ?? null,
+        website: input.website ?? null,
+        discoverySource: input.discoverySource ?? null,
+        discoveryKeyword: input.discoveryKeyword ?? null,
+        duplicate: true,
+      },
+      posts: input.posts ?? [],
+      analyzed_at: now,
+    });
+
+    await supabase.from("lead_events").insert({
+      lead_id: duplicate.id,
+      event_type: "rediscovered_on_instagram",
+      summary: `Lead reencontrado por ${input.discoveryKeyword ?? input.discoverySource ?? "prospecção"}`,
+      payload: {
+        discoverySource: input.discoverySource,
+        discoveryKeyword: input.discoveryKeyword,
+        score,
+      },
+    });
+
     return {
       mode: "persisted",
       duplicateLeadId: duplicate.id,

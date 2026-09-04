@@ -185,7 +185,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
   ] as const;
 
   return (
-    <AppShell active="Visão Geral">
+    <AppShell active="Visão Geral" operationMode={appMode}>
         <header className="border-b border-black/10 bg-white px-5 py-4 md:px-8">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>

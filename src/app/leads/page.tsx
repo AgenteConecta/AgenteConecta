@@ -15,6 +15,7 @@ import {
 import { AppShell } from "@/components/app-shell";
 import { generateFirstContactVariants } from "@/features/conversations/first-contact";
 import { approveLeadForOutreach, listLeadPipeline, listLeadsForReview, updateLeadReviewState } from "@/features/leads/review-repository";
+import { getOperationalAppMode } from "@/features/safety/app-mode";
 import { identifyProspectingLane, prospectingLaneLabel, type ProspectingLane } from "@/features/prospecting/prospecting-lane";
 import { scoreLead } from "@/features/scoring/scoring";
 
@@ -49,6 +50,54 @@ function statusLabel(state?: string | null) {
   };
 
   return labels[state ?? "none"] ?? state ?? "Novo";
+}
+
+function leadTypeLabel(type?: string | null) {
+  const labels: Record<string, string> = {
+    business: "Empresa",
+    professional: "Profissional",
+    learner: "Aluno/treinamento",
+    unknown: "Indefinido",
+  };
+
+  return labels[type ?? "unknown"] ?? type ?? "Indefinido";
+}
+
+function formatFollowers(value?: number | null) {
+  if (!value) {
+    return "-";
+  }
+  if (value >= 1_000_000) {
+    return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1)}M`;
+  }
+  if (value >= 1_000) {
+    return `${(value / 1_000).toFixed(value >= 100_000 ? 0 : 1)}K`;
+  }
+
+  return String(value);
+}
+
+function formatDate(value?: string | null) {
+  if (!value) {
+    return "-";
+  }
+
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function freshnessLabel(lead: LeadRow) {
+  const count = lead.prospecting_count ?? 0;
+  if (count > 1) {
+    return `Reencontrado ${count}x`;
+  }
+
+  return "Novo";
 }
 
 function toLeadInput(lead: LeadRow) {
@@ -144,6 +193,7 @@ function ApprovalMessageForm({
 
 export default async function LeadsPage({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
+  const appMode = await getOperationalAppMode();
   const leads = await listLeadsForReview({
     q: params.q,
     minScore: params.minScore ? Number(params.minScore) : undefined,
@@ -168,9 +218,17 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
     },
     { training: 0, credentialing: 0, equipment: 0, partnership: 0, review: 0 } satisfies Record<ProspectingLane, number>,
   );
+  const typeCounts = rows.reduce(
+    (acc, row) => {
+      const type = row.lead.lead_type === "business" || row.lead.lead_type === "professional" || row.lead.lead_type === "learner" ? row.lead.lead_type : "unknown";
+      acc[type] += 1;
+      return acc;
+    },
+    { business: 0, professional: 0, learner: 0, unknown: 0 },
+  );
 
   return (
-    <AppShell active="Leads">
+    <AppShell active="Leads" operationMode={appMode}>
       <header className="border-b border-black/10 bg-white px-5 py-4 md:px-8">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
@@ -185,6 +243,14 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
               </div>
             ))}
           </div>
+        </div>
+        <div className="mt-4 grid gap-2 sm:grid-cols-4">
+          {Object.entries(typeCounts).map(([type, count]) => (
+            <div key={type} className="rounded-md border border-black/10 bg-[#f7f8f5] px-3 py-2">
+              <div className="text-xs text-ink/55">{leadTypeLabel(type)}</div>
+              <div className="text-lg font-semibold">{count}</div>
+            </div>
+          ))}
         </div>
         {params.notice ? (
           <div className="mt-4 rounded-md border border-pine/20 bg-mint px-4 py-3 text-sm font-medium text-pine">
@@ -222,12 +288,15 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
           </form>
 
           <div className="mt-4 overflow-x-auto rounded-lg border border-black/10 bg-white shadow-panel">
-            <div className="min-w-[760px]">
-              <div className="grid grid-cols-[minmax(230px,1.2fr)_145px_95px_95px_130px] border-b border-black/10 bg-[#f1f2ee] px-4 py-3 text-xs font-semibold uppercase text-ink/55">
+            <div className="min-w-[1040px]">
+              <div className="grid grid-cols-[minmax(230px,1.2fr)_145px_130px_95px_95px_120px_155px_130px] border-b border-black/10 bg-[#f1f2ee] px-4 py-3 text-xs font-semibold uppercase text-ink/55">
                 <div>Lead</div>
                 <div>Linha</div>
+                <div>Tipo</div>
                 <div>Score</div>
                 <div>Valor</div>
+                <div>Seguidores</div>
+                <div>Prospectado</div>
                 <div>Status</div>
               </div>
               <div className="divide-y divide-black/10">
@@ -235,17 +304,19 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
                   const isSelected = selected?.lead.id === lead.id;
                   return (
                     <a
-                      className={`grid grid-cols-[minmax(230px,1.2fr)_145px_95px_95px_130px] px-4 py-3 text-sm transition hover:bg-mint/45 ${isSelected ? "bg-mint/70" : ""}`}
+                      className={`grid grid-cols-[minmax(230px,1.2fr)_145px_130px_95px_95px_120px_155px_130px] px-4 py-3 text-sm transition hover:bg-mint/45 ${isSelected ? "bg-mint/70" : ""}`}
                       href={`/leads?q=${params.q ?? ""}&minScore=${params.minScore ?? ""}&lane=${params.lane ?? "all"}&selected=${lead.id}`}
                       key={lead.id}
                     >
                       <div className="min-w-0">
                         <div className="truncate font-semibold text-ink">@{lead.instagram_username}</div>
                         <div className="truncate text-xs text-ink/55">{lead.display_name ?? "Nome não identificado"}</div>
+                        <div className="truncate text-xs text-ink/45">{lead.latest_discovery_keyword ?? lead.discovery_keyword ?? "sem busca"}</div>
                       </div>
                       <div className="flex items-center">
                         <span className="rounded-md bg-[#f1f2ee] px-2 py-1 text-xs font-medium">{prospectingLaneLabel(lane)}</span>
                       </div>
+                      <div className="flex items-center text-xs font-medium text-ink/65">{leadTypeLabel(lead.lead_type)}</div>
                       <div>
                         <span className={`inline-flex min-w-12 justify-center rounded-md px-2 py-1 text-xs font-semibold ${scoreTone(lead.lead_score ?? 0)}`}>{lead.lead_score ?? 0}</span>
                       </div>
@@ -253,6 +324,11 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
                         <span className={`inline-flex min-w-12 justify-center rounded-md px-2 py-1 text-xs font-semibold ${scoreTone(lead.commercial_value_score ?? 0)}`}>
                           {lead.commercial_value_score ?? 0}
                         </span>
+                      </div>
+                      <div className="text-xs font-semibold text-ink/70">{formatFollowers(lead.followers)}</div>
+                      <div>
+                        <div className="text-xs font-semibold text-ink/70">{freshnessLabel(lead)}</div>
+                        <div className="mt-1 text-xs text-ink/45">{formatDate(lead.last_prospected_at ?? lead.discovered_at)}</div>
                       </div>
                       <div className="truncate text-xs text-ink/60">{statusLabel(lead.channel_state)}</div>
                     </a>
@@ -304,8 +380,12 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
                 <div className="grid gap-2 text-sm">
                   <div className="flex justify-between gap-4"><span className="text-ink/55">Linha</span><strong>{prospectingLaneLabel(selected.lane)}</strong></div>
                   <div className="flex justify-between gap-4"><span className="text-ink/55">Tipo</span><strong>{selected.lead.lead_type ?? "unknown"}</strong></div>
+                  <div className="flex justify-between gap-4"><span className="text-ink/55">Seguidores</span><strong>{formatFollowers(selected.lead.followers)}</strong></div>
                   <div className="flex justify-between gap-4"><span className="text-ink/55">Consciência</span><strong>{selected.lead.market_awareness ?? "unaware"}</strong></div>
-                  <div className="flex justify-between gap-4"><span className="text-ink/55">Origem</span><strong>{selected.lead.discovery_keyword ?? "sem keyword"}</strong></div>
+                  <div className="flex justify-between gap-4"><span className="text-ink/55">Origem</span><strong>{selected.lead.latest_discovery_keyword ?? selected.lead.discovery_keyword ?? "sem keyword"}</strong></div>
+                  <div className="flex justify-between gap-4"><span className="text-ink/55">Primeira vez</span><strong>{formatDate(selected.lead.discovered_at)}</strong></div>
+                  <div className="flex justify-between gap-4"><span className="text-ink/55">Última prospecção</span><strong>{formatDate(selected.lead.last_prospected_at)}</strong></div>
+                  <div className="flex justify-between gap-4"><span className="text-ink/55">Histórico</span><strong>{freshnessLabel(selected.lead)}</strong></div>
                   <div className="flex justify-between gap-4"><span className="text-ink/55">Status</span><strong>{statusLabel(selected.lead.channel_state)}</strong></div>
                 </div>
               </div>

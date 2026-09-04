@@ -89,7 +89,7 @@ export async function queueProspectingRun(formData: FormData) {
     revalidatePath("/");
     revalidatePath("/leads");
     redirectWithNotice(
-      `Prospecção concluída: ${summary.persisted} novos, ${summary.duplicates} duplicados, ${summary.filteredOut} filtrados, ${summary.errors} erros. Contato automático: ${outreachSummary.prepared} criados, ${outreachSummary.processed} processados.`,
+      `Prospecção concluída: ${summary.discovered} encontrados, ${summary.persisted} novos, ${summary.duplicates} reencontrados/atualizados, ${summary.filteredOut} filtrados, ${summary.errors} erros. Contato automático: ${outreachSummary.prepared} criados, ${outreachSummary.processed} processados.`,
     );
   }
 
@@ -99,6 +99,7 @@ export async function queueProspectingRun(formData: FormData) {
 
 async function runProspectingKeywords(keywords: string[], maxProfilesPerKeyword: number) {
   const summary = {
+    discovered: 0,
     persisted: 0,
     duplicates: 0,
     filteredOut: 0,
@@ -118,6 +119,8 @@ async function runProspectingKeywords(keywords: string[], maxProfilesPerKeyword:
       summary.errorMessage = error instanceof Error ? error.message : "Erro desconhecido ao pesquisar no Instagram.";
       return [];
     });
+
+    summary.discovered += discovered.length;
 
     for (const lead of discovered) {
       if (await isOperationallyPaused()) {

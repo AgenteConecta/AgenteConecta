@@ -342,28 +342,26 @@ export async function sendInitialInstagramDm(params: {
     await page.bringToFront();
     await page.waitForTimeout(1800);
 
-    const messageButton = page
-      .locator('div[role="button"], button')
-      .filter({ hasText: /mensagem|message/i })
-      .first();
-    await messageButton.click({ timeout: 8000 }).catch(() => undefined);
-    await page.waitForTimeout(1800);
+    await dismissInstagramInterruptions(page);
 
-    const textbox = page.locator('div[role="textbox"][contenteditable="true"], textarea').first();
-    if ((await textbox.count()) > 0) {
-      await textbox.fill(params.message, { timeout: 8000 }).catch(async () => {
-        await textbox.click({ timeout: 3000 }).catch(() => undefined);
-        await page.keyboard.insertText(params.message);
-      });
+    if (!(await hasVisibleComposer(page))) {
+      const messageButton = page
+        .locator('a, div[role="button"], button')
+        .filter({ hasText: /mensagem|message/i })
+        .first();
+      await messageButton.click({ timeout: 10000 });
+      await page.waitForTimeout(2200);
+      await dismissInstagramInterruptions(page);
+    }
+
+    const filled = await fillInstagramComposer(page, params.message);
+
+    if (!filled) {
+      throw new Error("Não consegui preencher o campo de mensagem no Instagram.");
     }
 
     if (appMode === "production") {
-      const sendButton = page
-        .locator('div[role="button"], button')
-        .filter({ hasText: /enviar|send/i })
-        .last();
-
-      await sendButton.click({ timeout: 10000 });
+      await clickInstagramSend(page);
       await page.waitForTimeout(1200);
 
       return {
@@ -384,4 +382,65 @@ export async function sendInitialInstagramDm(params: {
     await page.close().catch(() => undefined);
     throw error;
   }
+}
+
+async function dismissInstagramInterruptions(page: Page) {
+  await page
+    .locator('button, div[role="button"]')
+    .filter({ hasText: /agora não|not now|não agora|cancelar|cancel/i })
+    .first()
+    .click({ timeout: 1500 })
+    .catch(() => undefined);
+}
+
+async function hasVisibleComposer(page: Page) {
+  return page
+    .locator('div[role="textbox"][contenteditable="true"], div[contenteditable="true"][aria-label*="Mensagem"], div[contenteditable="true"][aria-label*="Message"], textarea')
+    .first()
+    .isVisible({ timeout: 1500 })
+    .catch(() => false);
+}
+
+async function fillInstagramComposer(page: Page, message: string) {
+  const selectors = [
+    'div[contenteditable="true"][aria-label*="Mensagem"]',
+    'div[contenteditable="true"][aria-label*="Message"]',
+    'div[role="textbox"][contenteditable="true"]',
+    'div[contenteditable="true"]',
+    "textarea",
+  ];
+
+  for (const selector of selectors) {
+    const composer = page.locator(selector).last();
+    const isVisible = await composer.isVisible({ timeout: 1500 }).catch(() => false);
+
+    if (!isVisible) {
+      continue;
+    }
+
+    await composer.click({ timeout: 3000 });
+    await page.keyboard.press("Control+A").catch(() => undefined);
+    await page.keyboard.press("Meta+A").catch(() => undefined);
+    await page.keyboard.insertText(message);
+    await page.waitForTimeout(800);
+
+    const currentText = await composer.innerText({ timeout: 2000 }).catch(() => "");
+    const bodyText = await page.locator("body").innerText({ timeout: 2000 }).catch(() => "");
+    const marker = message.slice(0, Math.min(message.length, 24));
+
+    if (currentText.includes(marker) || bodyText.includes(marker)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+async function clickInstagramSend(page: Page) {
+  const sendButton = page
+    .locator('button, div[role="button"]')
+    .filter({ hasText: /enviar|send/i })
+    .last();
+
+  await sendButton.click({ timeout: 10000 });
 }

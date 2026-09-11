@@ -266,12 +266,14 @@ async function runProspectingKeywords({
         }
 
         const enrichedLead = await withTimeout(
-          readInstagramPublicProfile(lead.instagramUsername).then((profile) => ({
-            ...lead,
-            ...profile,
-            discoverySource: lead.discoverySource,
-            discoveryKeyword: lead.discoveryKeyword,
-          })),
+          readInstagramPublicProfile(lead.instagramUsername)
+            .then((profile) => ({
+              ...lead,
+              ...profile,
+              discoverySource: lead.discoverySource,
+              discoveryKeyword: lead.discoveryKeyword,
+            }))
+            .catch(() => lead),
           20000,
           lead,
         );

@@ -137,7 +137,12 @@ export async function discoverProfilesFromHashtag(params: {
     const usernames: string[] = [];
 
     for (const url of urls) {
-      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 });
+      const opened = await gotoInstagramPage(page, url);
+
+      if (!opened) {
+        continue;
+      }
+
       await page.waitForTimeout(3500);
 
       const loggedOut = await page.evaluate(() => {
@@ -165,7 +170,12 @@ export async function discoverProfilesFromHashtag(params: {
 
       for (const postUrl of postUrls) {
         assertInstagramUrl(postUrl);
-        await page.goto(postUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
+        const openedPost = await gotoInstagramPage(page, postUrl);
+
+        if (!openedPost) {
+          continue;
+        }
+
         await page.waitForTimeout(1800);
 
         const username = (await collectVisibleUsernames(page, 3))[0] ?? null;
@@ -212,7 +222,12 @@ export async function discoverProfilesFromInfluencerNetwork(params: {
   assertInstagramUrl(profileUrl);
 
   try {
-    await page.goto(profileUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
+    const openedProfile = await gotoInstagramPage(page, profileUrl);
+
+    if (!openedProfile) {
+      return [];
+    }
+
     await page.waitForTimeout(3000);
 
     const loggedOut = await page.evaluate(() => {
@@ -241,7 +256,12 @@ export async function discoverProfilesFromInfluencerNetwork(params: {
       }
 
       assertInstagramUrl(postUrl);
-      await page.goto(postUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
+      const openedPost = await gotoInstagramPage(page, postUrl);
+
+      if (!openedPost) {
+        continue;
+      }
+
       await page.waitForTimeout(1800);
       addUsernames(usernames, await collectVisibleUsernames(page, params.maxProfiles * 2), params.maxProfiles, ownUsername);
       await scrollAndCollectUsernames(page, usernames, params.maxProfiles, ownUsername, 2);
@@ -262,7 +282,12 @@ export async function discoverProfilesFromInfluencerNetwork(params: {
 }
 
 async function collectFromInstagramSearchPanel(page: Page, keyword: string, usernames: string[], limit: number, ownUsername: string) {
-  await page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 45000 });
+  const opened = await gotoInstagramPage(page, "https://www.instagram.com/");
+
+  if (!opened) {
+    return;
+  }
+
   await page.waitForTimeout(1800);
 
   const searchTrigger = page
@@ -288,6 +313,17 @@ async function scrollAndCollectUsernames(page: Page, usernames: string[], limit:
     await page.evaluate(() => window.scrollBy(0, Math.max(window.innerHeight * 0.9, 600))).catch(() => undefined);
     await page.waitForTimeout(1200);
     addUsernames(usernames, await collectVisibleUsernames(page, limit * 4), limit, ownUsername);
+  }
+}
+
+async function gotoInstagramPage(page: Page, url: string, timeout = 45000) {
+  assertInstagramUrl(url);
+
+  try {
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout });
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -357,7 +393,16 @@ export async function readInstagramPublicProfile(username: string): Promise<Lead
   const page = await context.newPage();
 
   try {
-    await page.goto(profileUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
+    const openedProfile = await gotoInstagramPage(page, profileUrl);
+
+    if (!openedProfile) {
+      return {
+        instagramUsername: `@${normalizedUsername}`,
+        displayName: normalizedUsername,
+        country: "Brasil",
+      };
+    }
+
     await page.waitForTimeout(2500);
 
     const profile = await page.evaluate(() => {

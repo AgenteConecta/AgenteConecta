@@ -24,7 +24,32 @@ const audienceTerms: Record<string, string[]> = {
   equipment: ["loja de elétrica", "loja de eletrica", "material elétrico", "material eletrico", "revenda", "distribuidora", "fornecedor", "equipamentos", "automação", "automacao"],
 };
 
-const disqualifyingTerms = ["blog pessoal", "moda", "beleza", "maquiagem", "receitas", "viagem", "meme", "humor", "fitness", "academia", "jogo", "games", "notícia", "noticia"];
+const unrelatedTerms = ["blog pessoal", "moda", "beleza", "maquiagem", "receitas", "viagem", "meme", "humor", "fitness", "academia", "jogo", "games", "notícia", "noticia"];
+
+const adultOrEscortTerms = [
+  "garota de programa",
+  "garoto de programa",
+  "acompanhante",
+  "acompanhantes",
+  "escort",
+  "call girl",
+  "onlyfans",
+  "privacy",
+  "conteudo adulto",
+  "conteúdo adulto",
+  "18+",
+  "nudes",
+  "nude",
+  "pack",
+  "packs",
+  "programinha",
+  "atendimento com local",
+  "atendimento sem local",
+  "sigilo total",
+  "massagem sensual",
+  "fetiche",
+  "sugar baby",
+];
 
 function normalize(value: string): string {
   return value
@@ -37,10 +62,20 @@ export function hasMinimumIcpSignal(lead: LeadProfileInput): boolean {
   return hasAudienceIcpSignal(lead, "auto");
 }
 
+export function hasDisqualifyingIcpSignal(lead: LeadProfileInput): boolean {
+  const text = normalize([lead.instagramUsername, lead.displayName, lead.bio, lead.category, lead.website, ...(lead.posts ?? [])].filter(Boolean).join(" "));
+
+  if (!text.trim()) {
+    return false;
+  }
+
+  return [...unrelatedTerms, ...adultOrEscortTerms].some((term) => text.includes(normalize(term)));
+}
+
 export function hasAudienceIcpSignal(lead: LeadProfileInput, audienceId: string): boolean {
   const text = normalize([lead.displayName, lead.bio, lead.category, lead.website, ...(lead.posts ?? [])].filter(Boolean).join(" "));
 
-  if (!text.trim() || disqualifyingTerms.some((term) => text.includes(normalize(term)))) {
+  if (!text.trim() || hasDisqualifyingIcpSignal(lead)) {
     return false;
   }
 

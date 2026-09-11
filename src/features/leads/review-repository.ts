@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSupabaseAdminClient } from "@/integrations/supabase/client";
 import { getOperationalAppMode } from "@/features/safety/app-mode";
+import { hasDisqualifyingIcpSignal } from "@/features/prospecting/icp-filter";
 import type { DashboardLead } from "@/features/analytics/dashboard-data";
 
 export type LeadReviewFilters = {
@@ -95,7 +96,7 @@ export async function listLeadsForReview(filters: LeadReviewFilters): Promise<Da
 
   let query = supabase
     .from("leads")
-    .select("id, instagram_username, display_name, bio, city, state, phone, lead_type, market_awareness, lead_score, commercial_value_score, discovery_keyword, discovered_at, updated_at, channel_state, do_not_contact, human_review_required")
+    .select("id, instagram_username, display_name, bio, category, city, state, phone, website, lead_type, market_awareness, lead_score, commercial_value_score, discovery_keyword, discovered_at, updated_at, channel_state, do_not_contact, human_review_required")
     .order("updated_at", { ascending: false })
     .limit(500);
 
@@ -176,7 +177,7 @@ export async function listLeadsForReview(filters: LeadReviewFilters): Promise<Da
     });
   }
 
-  return leadRows.map((lead) => {
+  const rows = leadRows.map((lead) => {
     const profile = latestProfileByLead.get(lead.id);
     const prospecting = prospectingByLead.get(lead.id);
     const followers = Number(profile?.public_snapshot?.followers ?? 0);
@@ -189,6 +190,21 @@ export async function listLeadsForReview(filters: LeadReviewFilters): Promise<Da
       latest_discovery_keyword: prospecting?.keyword ?? profile?.public_snapshot?.discoveryKeyword ?? lead.discovery_keyword,
     };
   });
+
+  if (filters.status === "closed" || filters.status === "rejected" || filters.status === "do_not_contact") {
+    return rows;
+  }
+
+  return rows.filter((lead) => !hasDisqualifyingIcpSignal({
+    instagramUsername: `@${lead.instagram_username ?? ""}`,
+    displayName: lead.display_name ?? undefined,
+    bio: lead.bio ?? undefined,
+    category: lead.category ?? undefined,
+    city: lead.city ?? undefined,
+    state: lead.state ?? undefined,
+    website: lead.website ?? undefined,
+    discoveryKeyword: lead.discovery_keyword ?? undefined,
+  }));
 }
 
 export async function getLeadStorageStats(): Promise<LeadStorageStats> {

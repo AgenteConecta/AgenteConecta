@@ -67,6 +67,66 @@ export async function getApprovedOutreachCount() {
   return count ?? 0;
 }
 
+export async function getApprovedOutreachStats() {
+  const supabase = getSupabaseAdminClient();
+
+  if (!supabase) {
+    return {
+      pending: 0,
+      sent: 0,
+      prepared: 0,
+      failed: 0,
+      blocked: 0,
+    };
+  }
+
+  const [pending, sent, prepared, failed, blocked] = await Promise.all([
+    supabase
+      .from("messages")
+      .select("id", { count: "exact", head: true })
+      .eq("channel", "browser")
+      .eq("direction", "outbound")
+      .eq("message_variant", "first_contact_approved")
+      .in("result", ["dry_run_prepared_not_sent", "queued_for_operator_confirmation", "send_failed"]),
+    supabase
+      .from("messages")
+      .select("id", { count: "exact", head: true })
+      .eq("channel", "browser")
+      .eq("direction", "outbound")
+      .eq("message_variant", "first_contact_approved")
+      .eq("result", "sent"),
+    supabase
+      .from("messages")
+      .select("id", { count: "exact", head: true })
+      .eq("channel", "browser")
+      .eq("direction", "outbound")
+      .eq("message_variant", "first_contact_approved")
+      .eq("result", "dry_run_blocked"),
+    supabase
+      .from("messages")
+      .select("id", { count: "exact", head: true })
+      .eq("channel", "browser")
+      .eq("direction", "outbound")
+      .eq("message_variant", "first_contact_approved")
+      .eq("result", "send_failed"),
+    supabase
+      .from("messages")
+      .select("id", { count: "exact", head: true })
+      .eq("channel", "browser")
+      .eq("direction", "outbound")
+      .eq("message_variant", "first_contact_approved")
+      .eq("result", "blocked_do_not_contact"),
+  ]);
+
+  return {
+    pending: pending.count ?? 0,
+    sent: sent.count ?? 0,
+    prepared: prepared.count ?? 0,
+    failed: failed.count ?? 0,
+    blocked: blocked.count ?? 0,
+  };
+}
+
 export async function getAutomaticOutreachCandidateCount() {
   const supabase = getSupabaseAdminClient();
 

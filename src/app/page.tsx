@@ -28,7 +28,7 @@ import { prospectingAudiences } from "@/features/prospecting/audiences";
 import { ProspectingLauncher } from "@/components/prospecting-launcher";
 import { listRecentProspectingRuns, queueProspectingRun, type ProspectingRunSummary } from "@/features/prospecting/prospecting-actions";
 import { getLeadStorageStats, listLeadsForReview, type LeadStorageStats } from "@/features/leads/review-repository";
-import { getApprovedOutreachCount, getAutomaticOutreachCandidateCount, processApprovedOutreach, processAutomaticQualifiedOutreach } from "@/features/outreach/outreach-actions";
+import { getApprovedOutreachStats, getAutomaticOutreachCandidateCount, processApprovedOutreach, processAutomaticQualifiedOutreach } from "@/features/outreach/outreach-actions";
 import { getOperationalAppMode } from "@/features/safety/app-mode";
 import { getOperationalPause } from "@/features/safety/operation-pause";
 import { identifyProspectingLane, type ProspectingLane } from "@/features/prospecting/prospecting-lane";
@@ -333,9 +333,9 @@ const emptyLeadStorageStats: LeadStorageStats = {
 export default async function Home({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
   const business = loadBusinessConfig();
-  const [dashboard, approvedOutreachCount, automaticCandidateCount, appMode, pause, allLeads, leadStorageStats, recentProspectingRuns] = await Promise.all([
+  const [dashboard, approvedOutreachStats, automaticCandidateCount, appMode, pause, allLeads, leadStorageStats, recentProspectingRuns] = await Promise.all([
     getDashboardData().catch(() => emptyDashboard),
-    getApprovedOutreachCount().catch(() => 0),
+    getApprovedOutreachStats().catch(() => ({ pending: 0, sent: 0, prepared: 0, failed: 0, blocked: 0 })),
     getAutomaticOutreachCandidateCount().catch(() => 0),
     getOperationalAppMode().catch(() => "dry_run" as const),
     getOperationalPause().catch(() => ({ paused: false, reason: "Sem pausa operacional", source: "none" as const })),
@@ -428,23 +428,33 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
               <div className="mt-4 grid gap-2 sm:grid-cols-3">
                 <div className="rounded-md bg-[#f7f8f5] px-3 py-2">
                   <div className="text-xs text-ink/55">Na fila</div>
-                  <div className="text-2xl font-semibold">{approvedOutreachCount}</div>
+                  <div className="text-2xl font-semibold">{approvedOutreachStats.pending}</div>
                 </div>
                 <div className="rounded-md bg-[#f7f8f5] px-3 py-2">
-                  <div className="text-xs text-ink/55">Modo</div>
-                  <div className="text-sm font-semibold">{appMode}</div>
+                  <div className="text-xs text-ink/55">Enviadas</div>
+                  <div className="text-2xl font-semibold">{approvedOutreachStats.sent}</div>
                 </div>
                 <div className="rounded-md bg-[#f7f8f5] px-3 py-2">
-                  <div className="text-xs text-ink/55">Envio real</div>
-                  <div className="text-sm font-semibold">{outreachModeLabel(appMode)}</div>
+                  <div className="text-xs text-ink/55">Falhas/repetir</div>
+                  <div className="text-2xl font-semibold">{approvedOutreachStats.failed}</div>
                 </div>
+              </div>
+              <div className="mt-3 rounded-md bg-[#f7f8f5] px-3 py-2 text-xs leading-5 text-ink/60">
+                Com 35 leads e lote 10, cada execução pega os 10 aprovados mais antigos ainda pendentes. Os enviados saem da fila; os restantes continuam para o próximo lote.
               </div>
             </div>
             <form action={processApprovedOutreach} className="grid content-start gap-3">
               <label className="grid gap-2">
-                <span className="text-xs font-semibold uppercase text-ink/45">Processar até</span>
-                <input className="h-10 rounded-md border border-black/10 bg-white px-3 text-sm" defaultValue={5} min={1} max={10} name="maxMessages" type="number" />
+                <span className="text-xs font-semibold uppercase text-ink/45">Lote</span>
+                <select className="h-10 rounded-md border border-black/10 bg-white px-3 text-sm" defaultValue={10} name="maxMessages">
+                  <option value={5}>5 mensagens</option>
+                  <option value={10}>10 mensagens</option>
+                  <option value={15}>15 mensagens</option>
+                </select>
               </label>
+              <div className="rounded-md bg-[#f7f8f5] px-3 py-2 text-xs leading-5 text-ink/60">
+                Modo atual: <strong>{appMode}</strong>. {outreachModeLabel(appMode)}.
+              </div>
               <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-pine px-4 text-sm font-medium text-white transition hover:brightness-95 active:scale-[0.99]">
                 <Send className="h-4 w-4" />
                 Enviar contatos aprovados

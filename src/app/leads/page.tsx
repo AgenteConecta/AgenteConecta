@@ -199,9 +199,9 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
         </div>
       </header>
 
-      <div className="min-h-[calc(100vh-89px)]">
-        <section className="px-5 py-5 md:px-8">
-          <form className="grid gap-3 border-b border-black/10 pb-4 md:grid-cols-[1fr_150px_210px_180px_170px_auto]">
+      <div className="grid min-h-[calc(100vh-89px)] grid-cols-1 xl:h-[calc(100vh-230px)] xl:min-h-[620px] xl:grid-cols-[minmax(640px,1fr)_minmax(420px,520px)] xl:overflow-hidden">
+        <section className="border-r border-black/10 px-5 py-5 md:px-8 xl:flex xl:min-h-0 xl:flex-col xl:overflow-hidden">
+          <form className="grid shrink-0 gap-3 border-b border-black/10 pb-4 md:grid-cols-[1fr_150px_210px_180px_170px_auto]">
             <label className="flex h-10 items-center gap-2 rounded-md border border-black/10 bg-white px-3">
               <Search className="h-4 w-4 text-ink/45" />
               <input className="w-full bg-transparent text-sm outline-none" defaultValue={params.q ?? ""} name="q" placeholder="Buscar username, bio, palavra-chave" />
@@ -251,7 +251,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
             </button>
           </form>
 
-          <div className="mt-4 overflow-x-auto rounded-lg border border-black/10 bg-white shadow-panel">
+          <div className="mt-4 overflow-auto rounded-lg border border-black/10 bg-white shadow-panel xl:min-h-0 xl:flex-1">
             <div className="min-w-[1040px]">
               <div className="grid grid-cols-[minmax(230px,1.2fr)_145px_130px_95px_95px_120px_155px_130px] border-b border-black/10 bg-[#f1f2ee] px-4 py-3 text-xs font-semibold uppercase text-ink/55">
                 <div>Lead</div>
@@ -303,9 +303,9 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
           </div>
         </section>
 
-        <aside className="border-t border-black/10 bg-white px-5 py-5 md:px-8">
+        <aside className="border-t border-black/10 bg-white px-5 py-5 md:px-6 xl:h-full xl:overflow-y-auto xl:border-t-0">
           {selected ? (
-            <div className="mx-auto max-w-5xl space-y-5">
+            <div className="space-y-5">
               <div>
                 <div className="flex items-start justify-between gap-3">
                   <div>

@@ -11,6 +11,7 @@ import { discoverProfilesFromHashtag, readInstagramPublicProfile } from "@/integ
 import { runAutomaticQualifiedOutreach } from "@/features/outreach/outreach-actions";
 import { getOperationalAppMode } from "@/features/safety/app-mode";
 import { isOperationallyPaused } from "@/features/safety/operation-pause";
+import { saveProspectingDefaults } from "@/features/prospecting/prospecting-settings";
 
 export type ProspectingRunSummary = {
   id: string;
@@ -46,6 +47,7 @@ export async function queueProspectingRun(formData: FormData) {
   const keywords = (customKeywords.length > 0 ? customKeywords : audience.keywords).slice(0, 12);
   const runNow = formData.get("runNow") === "on";
   const autoContact = formData.get("autoContact") === "on";
+  const saveConfig = formData.get("saveConfig") === "on";
   const minScoreRaw = Number(formData.get("minScore") ?? 70);
   const minFollowersRaw = Number(formData.get("minFollowers") ?? 10000);
   const batchSizeRaw = Number(formData.get("batchSize") ?? 5);
@@ -53,6 +55,21 @@ export async function queueProspectingRun(formData: FormData) {
   const minFollowers = Math.max(0, Math.min(Number.isFinite(minFollowersRaw) ? minFollowersRaw : 10000, 10_000_000));
   const batchSize = normalizeBatchSize(batchSizeRaw);
   const appMode = await getOperationalAppMode();
+
+  if (saveConfig) {
+    await saveProspectingDefaults({
+      audienceId,
+      audienceLabel,
+      keywords,
+      targetNewLeads,
+      maxProfilesPerKeyword,
+      stopAtTarget,
+      autoContact,
+      minScore,
+      minFollowers,
+      batchSize,
+    });
+  }
 
   if (await isOperationallyPaused()) {
     redirectWithNotice("Master pause ativo. Desative a pausa antes de iniciar uma nova prospecção.");
@@ -138,12 +155,12 @@ export async function queueProspectingRun(formData: FormData) {
     revalidatePath("/leads");
     const emptyReason = summary.discovered === 0 ? " Nenhum perfil foi capturado no Instagram para essas buscas; tente palavras mais amplas ou verifique se o Chrome logado está carregando resultados." : "";
     redirectWithNotice(
-      `Prospecção concluída: ${summary.discovered} encontrados, ${summary.persisted} novos, ${summary.duplicates} repetidos, ${summary.skippedKnown} já conhecidos pulados, ${summary.filteredOut} filtrados, ${summary.errors} erros. Meta: ${summary.targetNewLeads ?? "sem limite"} novos${summary.targetReached ? " (atingida)" : ""}. Contato automático: ${outreachSummary.prepared} criados, ${outreachSummary.processed} processados.${emptyReason}`,
+      `Prospecção concluída: ${summary.discovered} encontrados, ${summary.persisted} novos, ${summary.duplicates} repetidos, ${summary.skippedKnown} já conhecidos pulados, ${summary.filteredOut} filtrados, ${summary.errors} erros. Meta: ${summary.targetNewLeads ?? "sem limite"} novos${summary.targetReached ? " (atingida)" : ""}. Contato automático: ${outreachSummary.prepared} criados, ${outreachSummary.processed} processados.${saveConfig ? " Configuração salva para próximas pesquisas." : ""}${emptyReason}`,
     );
   }
 
   revalidatePath("/");
-  redirectWithNotice(`Prospecção enfileirada: ${audienceLabel} com ${keywords.length} buscas. Modo dry-run: nenhum contato será enviado.`);
+  redirectWithNotice(`Prospecção enfileirada: ${audienceLabel} com ${keywords.length} buscas. ${saveConfig ? "Configuração salva para próximas pesquisas. " : ""}Modo dry-run: nenhum contato será enviado.`);
 }
 
 async function runProspectingKeywords({

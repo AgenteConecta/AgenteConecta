@@ -25,6 +25,7 @@ import { ChromeInstagramControls } from "@/components/chrome-instagram-controls"
 import { OperationalModeSwitch } from "@/components/operational-mode-switch";
 import { PauseControls } from "@/components/pause-controls";
 import { prospectingAudiences } from "@/features/prospecting/audiences";
+import { getProspectingDefaults } from "@/features/prospecting/prospecting-settings";
 import { ProspectingLauncher } from "@/components/prospecting-launcher";
 import { listRecentProspectingRuns, queueProspectingRun, type ProspectingRunSummary } from "@/features/prospecting/prospecting-actions";
 import { getLeadStorageStats, listLeadsForReview, type LeadStorageStats } from "@/features/leads/review-repository";
@@ -333,7 +334,7 @@ const emptyLeadStorageStats: LeadStorageStats = {
 export default async function Home({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
   const business = loadBusinessConfig();
-  const [dashboard, approvedOutreachStats, automaticCandidateCount, appMode, pause, allLeads, leadStorageStats, recentProspectingRuns] = await Promise.all([
+  const [dashboard, approvedOutreachStats, automaticCandidateCount, appMode, pause, allLeads, leadStorageStats, recentProspectingRuns, prospectingDefaults] = await Promise.all([
     getDashboardData().catch(() => emptyDashboard),
     getApprovedOutreachStats().catch(() => ({ pending: 0, sent: 0, prepared: 0, failed: 0, blocked: 0 })),
     getAutomaticOutreachCandidateCount().catch(() => 0),
@@ -342,6 +343,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
     listLeadsForReview({}).catch(() => []),
     getLeadStorageStats().catch(() => emptyLeadStorageStats),
     listRecentProspectingRuns().catch(() => []),
+    getProspectingDefaults(),
   ]);
   const hotLead = dashboard.hotLead;
   const hotLeadInput = hotLead
@@ -412,7 +414,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
         </header>
 
         <div className="space-y-6 px-5 py-6 md:px-8">
-          <ProspectingLauncher action={queueProspectingRun} audiences={prospectingAudiences} />
+          <ProspectingLauncher action={queueProspectingRun} audiences={prospectingAudiences} defaults={prospectingDefaults} />
           <LeadStoragePanel stats={leadStorageStats} runs={recentProspectingRuns} />
 
           <section className="grid gap-4 rounded-lg border border-black/10 bg-white p-5 shadow-panel lg:grid-cols-[1fr_360px]">

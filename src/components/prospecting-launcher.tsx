@@ -4,6 +4,7 @@ import { Plus, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
 import type { ProspectingAudience } from "@/features/prospecting/audiences";
+import type { ProspectingDefaults } from "@/features/prospecting/prospecting-settings";
 
 type EditableAudience = ProspectingAudience & {
   custom?: boolean;
@@ -12,6 +13,7 @@ type EditableAudience = ProspectingAudience & {
 type ProspectingLauncherProps = {
   action: (formData: FormData) => void | Promise<void>;
   audiences: ProspectingAudience[];
+  defaults: ProspectingDefaults;
 };
 
 function slugify(input: string) {
@@ -44,10 +46,22 @@ function ProspectingSubmitStatus() {
   );
 }
 
-export function ProspectingLauncher({ action, audiences }: ProspectingLauncherProps) {
-  const [editableAudiences, setEditableAudiences] = useState<EditableAudience[]>(audiences);
-  const [selectedId, setSelectedId] = useState(audiences[0]?.id ?? "auto");
-  const [keywords, setKeywords] = useState(audiences[0]?.keywords.join("\n") ?? "");
+export function ProspectingLauncher({ action, audiences, defaults }: ProspectingLauncherProps) {
+  const initialAudience = audiences.some((audience) => audience.id === defaults.audienceId)
+    ? audiences
+    : [
+        ...audiences,
+        {
+          id: defaults.audienceId,
+          label: defaults.audienceLabel,
+          description: "Público salvo como configuração padrão.",
+          keywords: defaults.keywords,
+          custom: true,
+        },
+      ];
+  const [editableAudiences, setEditableAudiences] = useState<EditableAudience[]>(initialAudience);
+  const [selectedId, setSelectedId] = useState(defaults.audienceId || audiences[0]?.id || "auto");
+  const [keywords, setKeywords] = useState(defaults.keywords.join("\n") || audiences[0]?.keywords.join("\n") || "");
   const [newKeyword, setNewKeyword] = useState("");
   const [newAudienceName, setNewAudienceName] = useState("");
   const [newAudienceKeywords, setNewAudienceKeywords] = useState("");
@@ -191,34 +205,34 @@ export function ProspectingLauncher({ action, audiences }: ProspectingLauncherPr
         <div className="grid gap-2 sm:grid-cols-2">
           <label className="grid gap-2">
             <span className="text-xs font-semibold uppercase text-ink/45">Meta de novos leads</span>
-            <input className="h-10 rounded-md border border-black/10 bg-white px-3 text-sm" defaultValue={50} min={1} max={300} name="targetNewLeads" type="number" />
+            <input className="h-10 rounded-md border border-black/10 bg-white px-3 text-sm" defaultValue={defaults.targetNewLeads} min={1} max={300} name="targetNewLeads" type="number" />
           </label>
           <label className="grid gap-2">
             <span className="text-xs font-semibold uppercase text-ink/45">Perfis por busca</span>
-            <input className="h-10 rounded-md border border-black/10 bg-white px-3 text-sm" defaultValue={15} min={1} max={50} name="maxProfiles" type="number" />
+            <input className="h-10 rounded-md border border-black/10 bg-white px-3 text-sm" defaultValue={defaults.maxProfilesPerKeyword} min={1} max={50} name="maxProfiles" type="number" />
           </label>
         </div>
         <label className="flex items-center gap-2 rounded-md border border-black/10 bg-[#f7f8f5] px-3 py-2 text-sm">
-          <input className="h-4 w-4 accent-pine" defaultChecked name="stopAtTarget" type="checkbox" />
+          <input className="h-4 w-4 accent-pine" defaultChecked={defaults.stopAtTarget} name="stopAtTarget" type="checkbox" />
           Parar quando atingir a meta de novos leads
         </label>
         <div className="grid gap-3 rounded-md border border-black/10 bg-[#f7f8f5] p-3">
           <label className="flex items-center gap-2 text-sm font-medium">
-            <input className="h-4 w-4 accent-pine" defaultChecked name="autoContact" type="checkbox" />
+            <input className="h-4 w-4 accent-pine" defaultChecked={defaults.autoContact} name="autoContact" type="checkbox" />
             Contatar automaticamente após qualificar
           </label>
           <div className="grid gap-2 sm:grid-cols-3">
             <label className="grid gap-2">
               <span className="text-xs font-semibold uppercase text-ink/45">Score mínimo</span>
-              <input className="h-10 rounded-md border border-black/10 bg-white px-3 text-sm" defaultValue={70} min={0} max={100} name="minScore" type="number" />
+              <input className="h-10 rounded-md border border-black/10 bg-white px-3 text-sm" defaultValue={defaults.minScore} min={0} max={100} name="minScore" type="number" />
             </label>
             <label className="grid gap-2">
               <span className="text-xs font-semibold uppercase text-ink/45">Seguidores mínimos</span>
-              <input className="h-10 rounded-md border border-black/10 bg-white px-3 text-sm" defaultValue={10000} min={0} max={10000000} name="minFollowers" type="number" />
+              <input className="h-10 rounded-md border border-black/10 bg-white px-3 text-sm" defaultValue={defaults.minFollowers} min={0} max={10000000} name="minFollowers" type="number" />
             </label>
             <label className="grid gap-2">
               <span className="text-xs font-semibold uppercase text-ink/45">Lote</span>
-              <select className="h-10 rounded-md border border-black/10 bg-white px-3 text-sm" defaultValue={5} name="batchSize">
+              <select className="h-10 rounded-md border border-black/10 bg-white px-3 text-sm" defaultValue={defaults.batchSize} name="batchSize">
                 <option value={5}>5 leads</option>
                 <option value={10}>10 leads</option>
                 <option value={15}>15 leads</option>
@@ -229,6 +243,10 @@ export function ProspectingLauncher({ action, audiences }: ProspectingLauncherPr
         <label className="flex items-center gap-2 rounded-md border border-black/10 bg-[#f7f8f5] px-3 py-2 text-sm">
           <input className="h-4 w-4 accent-pine" defaultChecked name="runNow" type="checkbox" />
           Executar agora no Chrome conectado
+        </label>
+        <label className="flex items-center gap-2 rounded-md border border-pine/20 bg-mint px-3 py-2 text-sm font-medium text-pine">
+          <input className="h-4 w-4 accent-pine" name="saveConfig" type="checkbox" />
+          Salvar esta configuração para as próximas pesquisas
         </label>
         <ProspectingSubmitStatus />
         <div className="rounded-md bg-[#f7f8f5] px-3 py-2 text-xs leading-5 text-ink/60">

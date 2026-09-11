@@ -27,6 +27,9 @@ export type ProspectingRunSummary = {
     filteredOut?: number;
     errors?: number;
     paused?: boolean;
+    targetNewLeads?: number | null;
+    skippedKnown?: number;
+    targetReached?: boolean;
   } | null;
 };
 
@@ -35,9 +38,12 @@ export async function queueProspectingRun(formData: FormData) {
   const audienceId = String(formData.get("audience") ?? audience.id);
   const audienceLabel = String(formData.get("audienceLabel") ?? audience.label).trim() || audience.label;
   const customKeywords = parseCustomKeywords(String(formData.get("keywords") ?? ""));
-  const maxProfilesRaw = Number(formData.get("maxProfiles") ?? 5);
-  const maxProfilesPerKeyword = Math.max(1, Math.min(Number.isFinite(maxProfilesRaw) ? maxProfilesRaw : 5, 10));
-  const keywords = (customKeywords.length > 0 ? customKeywords : audience.keywords).slice(0, 5);
+  const maxProfilesRaw = Number(formData.get("maxProfiles") ?? 15);
+  const maxProfilesPerKeyword = Math.max(1, Math.min(Number.isFinite(maxProfilesRaw) ? maxProfilesRaw : 15, 50));
+  const targetNewLeadsRaw = Number(formData.get("targetNewLeads") ?? 50);
+  const targetNewLeads = Math.max(1, Math.min(Number.isFinite(targetNewLeadsRaw) ? targetNewLeadsRaw : 50, 300));
+  const stopAtTarget = formData.get("stopAtTarget") === "on";
+  const keywords = (customKeywords.length > 0 ? customKeywords : audience.keywords).slice(0, 12);
   const runNow = formData.get("runNow") === "on";
   const autoContact = formData.get("autoContact") === "on";
   const minScoreRaw = Number(formData.get("minScore") ?? 70);
@@ -58,7 +64,7 @@ export async function queueProspectingRun(formData: FormData) {
     redirectWithNotice("Supabase não está configurado. A prospecção não foi enfileirada.");
   }
 
-  const idempotencyKey = `discover:${audienceId}:${keywords.join("|").toLowerCase()}:${maxProfilesPerKeyword}:${new Date().toISOString().slice(0, 13)}`;
+  const idempotencyKey = `discover:${audienceId}:${keywords.join("|").toLowerCase()}:${maxProfilesPerKeyword}:${stopAtTarget ? targetNewLeads : "open"}:${new Date().toISOString().slice(0, 13)}`;
   const { data: job, error } = await supabase.from("jobs").upsert(
     {
       type: "discover_leads",
@@ -70,6 +76,8 @@ export async function queueProspectingRun(formData: FormData) {
         audienceLabel,
         keywords,
         maxProfilesPerKeyword,
+        targetNewLeads: stopAtTarget ? targetNewLeads : null,
+        stopAtTarget,
         autoContact,
         minScore,
         minFollowers,
@@ -88,7 +96,12 @@ export async function queueProspectingRun(formData: FormData) {
   if (runNow) {
     await supabase.from("jobs").update({ status: "running", updated_at: new Date().toISOString() }).eq("id", job.id);
 
-    const summary = await runProspectingKeywords(keywords, maxProfilesPerKeyword);
+    const summary = await runProspectingKeywords({
+      keywords,
+      maxProfilesPerKeyword,
+      targetNewLeads: stopAtTarget ? targetNewLeads : null,
+      knownUsernames: await getKnownInstagramUsernames(),
+    });
     const outreachSummary = autoContact
       ? await runAutomaticQualifiedOutreach({
           minScore,
@@ -107,6 +120,8 @@ export async function queueProspectingRun(formData: FormData) {
           audienceLabel,
           keywords,
           maxProfilesPerKeyword,
+          targetNewLeads: stopAtTarget ? targetNewLeads : null,
+          stopAtTarget,
           autoContact,
           minScore,
           minFollowers,
@@ -123,7 +138,7 @@ export async function queueProspectingRun(formData: FormData) {
     revalidatePath("/leads");
     const emptyReason = summary.discovered === 0 ? " Nenhum perfil foi capturado no Instagram para essas buscas; tente palavras mais amplas ou verifique se o Chrome logado está carregando resultados." : "";
     redirectWithNotice(
-      `Prospecção concluída: ${summary.discovered} encontrados, ${summary.persisted} novos, ${summary.duplicates} reencontrados/atualizados, ${summary.filteredOut} filtrados, ${summary.errors} erros. Contato automático: ${outreachSummary.prepared} criados, ${outreachSummary.processed} processados.${emptyReason}`,
+      `Prospecção concluída: ${summary.discovered} encontrados, ${summary.persisted} novos, ${summary.duplicates} repetidos, ${summary.skippedKnown} já conhecidos pulados, ${summary.filteredOut} filtrados, ${summary.errors} erros. Meta: ${summary.targetNewLeads ?? "sem limite"} novos${summary.targetReached ? " (atingida)" : ""}. Contato automático: ${outreachSummary.prepared} criados, ${outreachSummary.processed} processados.${emptyReason}`,
     );
   }
 
@@ -131,25 +146,45 @@ export async function queueProspectingRun(formData: FormData) {
   redirectWithNotice(`Prospecção enfileirada: ${audienceLabel} com ${keywords.length} buscas. Modo dry-run: nenhum contato será enviado.`);
 }
 
-async function runProspectingKeywords(keywords: string[], maxProfilesPerKeyword: number) {
+async function runProspectingKeywords({
+  keywords,
+  maxProfilesPerKeyword,
+  targetNewLeads,
+  knownUsernames,
+}: {
+  keywords: string[];
+  maxProfilesPerKeyword: number;
+  targetNewLeads: number | null;
+  knownUsernames: Set<string>;
+}) {
   const summary = {
     discovered: 0,
     persisted: 0,
     duplicates: 0,
+    skippedKnown: 0,
     filteredOut: 0,
     errors: 0,
     paused: false,
+    targetNewLeads,
+    targetReached: false,
     diagnostics: [] as string[],
     errorMessage: null as string | null,
   };
 
   for (const keyword of keywords) {
+    if (targetNewLeads && summary.persisted >= targetNewLeads) {
+      summary.targetReached = true;
+      break;
+    }
+
     if (await isOperationallyPaused()) {
       summary.paused = true;
       break;
     }
 
-    const discovered = await discoverProfilesFromHashtag({ keyword, maxProfiles: maxProfilesPerKeyword }).catch((error: unknown) => {
+    const remainingTarget = targetNewLeads ? Math.max(targetNewLeads - summary.persisted, 1) : maxProfilesPerKeyword;
+    const profilesToRequest = Math.min(Math.max(maxProfilesPerKeyword, Math.ceil(remainingTarget * 1.8)), 50);
+    const discovered = await discoverProfilesFromHashtag({ keyword, maxProfiles: profilesToRequest }).catch((error: unknown) => {
       summary.errors += 1;
       summary.errorMessage = error instanceof Error ? error.message : "Erro desconhecido ao pesquisar no Instagram.";
       return [];
@@ -159,9 +194,22 @@ async function runProspectingKeywords(keywords: string[], maxProfilesPerKeyword:
     summary.diagnostics.push(`${keyword}: ${discovered.length} perfil(is) encontrado(s)`);
 
     for (const lead of discovered) {
+      if (targetNewLeads && summary.persisted >= targetNewLeads) {
+        summary.targetReached = true;
+        break;
+      }
+
       if (await isOperationallyPaused()) {
         summary.paused = true;
         break;
+      }
+
+      const normalizedUsername = normalizeInstagramUsername(lead.instagramUsername);
+      if (knownUsernames.has(normalizedUsername)) {
+        summary.duplicates += 1;
+        summary.skippedKnown += 1;
+        summary.diagnostics.push(`${lead.instagramUsername}: pulado porque já existe no CRM`);
+        continue;
       }
 
       const enrichedLead = await withTimeout(
@@ -194,13 +242,30 @@ async function runProspectingKeywords(keywords: string[], maxProfilesPerKeyword:
 
       if (persistence.duplicateLeadId) {
         summary.duplicates += 1;
+        knownUsernames.add(normalizedUsername);
       } else if (persistence.mode === "persisted") {
         summary.persisted += 1;
+        knownUsernames.add(normalizedUsername);
       }
     }
   }
 
   return summary;
+}
+
+async function getKnownInstagramUsernames() {
+  const supabase = getSupabaseAdminClient();
+
+  if (!supabase) {
+    return new Set<string>();
+  }
+
+  const { data } = await supabase.from("leads").select("instagram_username").not("instagram_username", "is", null);
+  return new Set((data ?? []).map((lead) => normalizeInstagramUsername(String(lead.instagram_username ?? ""))).filter(Boolean));
+}
+
+function normalizeInstagramUsername(username: string) {
+  return username.replace(/^@/, "").trim().toLowerCase();
 }
 
 export async function listRecentProspectingRuns(): Promise<ProspectingRunSummary[]> {

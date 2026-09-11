@@ -188,9 +188,19 @@ export function ProspectingLauncher({ action, audiences }: ProspectingLauncherPr
             Adicionar busca
           </button>
         </div>
-        <label className="grid gap-2">
-          <span className="text-xs font-semibold uppercase text-ink/45">Perfis por busca</span>
-          <input className="h-10 rounded-md border border-black/10 bg-white px-3 text-sm" defaultValue={5} min={1} max={10} name="maxProfiles" type="number" />
+        <div className="grid gap-2 sm:grid-cols-2">
+          <label className="grid gap-2">
+            <span className="text-xs font-semibold uppercase text-ink/45">Meta de novos leads</span>
+            <input className="h-10 rounded-md border border-black/10 bg-white px-3 text-sm" defaultValue={50} min={1} max={300} name="targetNewLeads" type="number" />
+          </label>
+          <label className="grid gap-2">
+            <span className="text-xs font-semibold uppercase text-ink/45">Perfis por busca</span>
+            <input className="h-10 rounded-md border border-black/10 bg-white px-3 text-sm" defaultValue={15} min={1} max={50} name="maxProfiles" type="number" />
+          </label>
+        </div>
+        <label className="flex items-center gap-2 rounded-md border border-black/10 bg-[#f7f8f5] px-3 py-2 text-sm">
+          <input className="h-4 w-4 accent-pine" defaultChecked name="stopAtTarget" type="checkbox" />
+          Parar quando atingir a meta de novos leads
         </label>
         <div className="grid gap-3 rounded-md border border-black/10 bg-[#f7f8f5] p-3">
           <label className="flex items-center gap-2 text-sm font-medium">

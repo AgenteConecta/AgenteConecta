@@ -1,21 +1,11 @@
-import {
-  AlertTriangle,
-  Ban,
-  CheckCircle2,
-  Clock3,
-  ExternalLink,
-  Filter,
-  Handshake,
-  MessageSquareText,
-  Search,
-  Sparkles,
-  Trash2,
-  UserRoundSearch,
-} from "lucide-react";
+import { AlertTriangle, ExternalLink, Filter, MessageSquareText, Search, Sparkles, UserRoundSearch } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { CopyTemplatesPanel } from "@/components/copy-templates-panel";
+import { LeadReviewControls } from "@/components/lead-review-controls";
 import { WhatsAppLeadPanel } from "@/components/whatsapp-lead-panel";
-import { generateFirstContactVariants } from "@/features/conversations/first-contact";
-import { approveLeadForOutreach, listLeadPipeline, listLeadsForReview, updateLeadReviewState } from "@/features/leads/review-repository";
+import { getCopyTemplates } from "@/features/conversations/copy-settings";
+import { generateFirstContactVariantsWithSavedCopy } from "@/features/conversations/first-contact";
+import { listLeadPipeline, listLeadsForReview } from "@/features/leads/review-repository";
 import { getOperationalAppMode } from "@/features/safety/app-mode";
 import { identifyProspectingLane, prospectingLaneLabel, type ProspectingLane } from "@/features/prospecting/prospecting-lane";
 import { scoreLead } from "@/features/scoring/scoring";
@@ -133,80 +123,19 @@ function laneForLead(lead: LeadRow): ProspectingLane {
   });
 }
 
-function ReviewAction({
-  lead,
-  lane,
-  action,
-  label,
-  icon: Icon,
-  tone,
-  returnTo,
-}: {
-  lead: LeadRow;
-  lane: ProspectingLane;
-  action: string;
-  label: string;
-  icon: typeof CheckCircle2;
-  tone: string;
-  returnTo: string;
-}) {
-  return (
-    <form action={action === "approve" ? approveLeadForOutreach : updateLeadReviewState}>
-      <input name="leadId" type="hidden" value={lead.id} />
-      <input name="lane" type="hidden" value={lane} />
-      <input name="username" type="hidden" value={`@${lead.instagram_username ?? ""}`} />
-      <input name="action" type="hidden" value={action} />
-      <input name="returnTo" type="hidden" value={returnTo} />
-      <button className={`inline-flex h-9 w-full items-center justify-center gap-2 rounded-md px-3 text-sm font-medium transition hover:brightness-95 active:scale-[0.99] ${tone}`}>
-        <Icon className="h-4 w-4" />
-        {label}
-      </button>
-    </form>
-  );
-}
-
-function ApprovalMessageForm({
-  lead,
-  lane,
-  message,
-  returnTo,
-}: {
-  lead: LeadRow;
-  lane: ProspectingLane;
-  message: string;
-  returnTo: string;
-}) {
-  return (
-    <form action={approveLeadForOutreach} className="space-y-3">
-      <input name="leadId" type="hidden" value={lead.id} />
-      <input name="lane" type="hidden" value={lane} />
-      <input name="username" type="hidden" value={`@${lead.instagram_username ?? ""}`} />
-      <input name="returnTo" type="hidden" value={returnTo} />
-      <label className="block">
-        <span className="mb-2 block text-xs font-semibold uppercase text-ink/45">Mensagem para aprovar</span>
-        <textarea
-          className="min-h-40 w-full resize-y rounded-md border border-black/10 bg-white px-3 py-3 text-sm leading-6 outline-none focus:border-pine"
-          defaultValue={message}
-          name="approvedMessage"
-        />
-      </label>
-      <button className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-pine px-3 text-sm font-medium text-white transition hover:brightness-95 active:scale-[0.99]">
-        <CheckCircle2 className="h-4 w-4" />
-        Aprovar abordagem editada
-      </button>
-    </form>
-  );
-}
-
 export default async function LeadsPage({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
   const appMode = await getOperationalAppMode();
-  const leads = await listLeadsForReview({
-    q: params.q,
-    minScore: params.minScore ? Number(params.minScore) : undefined,
-    status: params.status,
-    leadType: params.type,
-  });
+  const selectedStatus = params.status || "review_pending";
+  const [leads, copyTemplates] = await Promise.all([
+    listLeadsForReview({
+      q: params.q,
+      minScore: params.minScore ? Number(params.minScore) : undefined,
+      status: selectedStatus,
+      leadType: params.type,
+    }),
+    getCopyTemplates().catch(() => ({ all: "", electricians: "" })),
+  ]);
 
   const rows = leads
     .map((lead) => ({
@@ -217,8 +146,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
     .filter((row) => !params.lane || params.lane === "all" || row.lane === params.lane);
 
   const selected = rows.find((row) => row.lead.id === params.selected) ?? rows[0] ?? null;
-  const selectedApproaches = selected ? generateFirstContactVariants(selected.input, scoreLead(selected.input)) : [];
-  const returnTo = `/leads?q=${params.q ?? ""}&minScore=${params.minScore ?? ""}&lane=${params.lane ?? "all"}&status=${params.status ?? "all"}&type=${params.type ?? "all"}${selected ? `&selected=${selected.lead.id}` : ""}`;
+  const selectedApproaches = selected ? await generateFirstContactVariantsWithSavedCopy(selected.input, scoreLead(selected.input)) : [];
   const pipeline = selected ? await listLeadPipeline(selected.lead.id) : [];
   const counts = rows.reduce(
     (acc, row) => {
@@ -266,6 +194,9 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
             {params.notice}
           </div>
         ) : null}
+        <div className="mt-4">
+          <CopyTemplatesPanel templates={copyTemplates} returnTo="/leads" />
+        </div>
       </header>
 
       <div className="grid min-h-[calc(100vh-89px)] grid-cols-1 xl:grid-cols-[minmax(680px,1fr)_420px]">
@@ -290,12 +221,14 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
               <option value="partnership">Parceria/divulgação</option>
               <option value="review">Revisão</option>
             </select>
-            <select className="h-10 rounded-md border border-black/10 bg-white px-3 text-sm" defaultValue={params.status ?? "all"} name="status">
+            <select className="h-10 rounded-md border border-black/10 bg-white px-3 text-sm" defaultValue={selectedStatus} name="status">
+              <option value="review_pending">A revisar</option>
               <option value="all">Todos os status</option>
               <option value="none">Novo</option>
               <option value="qualified">Qualificado</option>
               <option value="contacted">Abordagem/contato</option>
-              <option value="approved_for_outreach">Aprovado</option>
+              <option value="approved">Aprovados</option>
+              <option value="approved_for_outreach">Aprovado para contato</option>
               <option value="auto_outreach_qualified">Contato automático</option>
               <option value="outreach_prepared">Abordagem preparada</option>
               <option value="operator_confirmation_required">Aguardando confirmação</option>
@@ -336,7 +269,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
                   return (
                     <a
                       className={`grid grid-cols-[minmax(230px,1.2fr)_145px_130px_95px_95px_120px_155px_130px] px-4 py-3 text-sm transition hover:bg-mint/45 ${isSelected ? "bg-mint/70" : ""}`}
-                      href={`/leads?q=${params.q ?? ""}&minScore=${params.minScore ?? ""}&lane=${params.lane ?? "all"}&status=${params.status ?? "all"}&type=${params.type ?? "all"}&selected=${lead.id}`}
+                      href={`/leads?q=${params.q ?? ""}&minScore=${params.minScore ?? ""}&lane=${params.lane ?? "all"}&status=${selectedStatus}&type=${params.type ?? "all"}&selected=${lead.id}`}
                       key={lead.id}
                     >
                       <div className="min-w-0">
@@ -427,7 +360,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
               </div>
 
               <div className="rounded-lg border border-black/10 bg-white">
-                <div className="border-b border-black/10 px-4 py-3 font-semibold">Abordagens para parceria</div>
+                <div className="border-b border-black/10 px-4 py-3 font-semibold">Exemplos de abordagem</div>
                 <div className="space-y-3 px-4 py-3">
                   {selectedApproaches.map((approach, index) => (
                     <div className="rounded-md bg-[#f7f8f5] p-3 text-sm leading-6 text-ink/75" key={approach}>
@@ -435,9 +368,15 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
                       {approach}
                     </div>
                   ))}
-              <ApprovalMessageForm lead={selected.lead} lane={selected.lane} message={selectedApproaches[0] ?? ""} returnTo={returnTo} />
-            </div>
-          </div>
+                </div>
+              </div>
+
+              <LeadReviewControls
+                defaultMessage={selectedApproaches[0] ?? ""}
+                lane={selected.lane}
+                leadId={selected.lead.id}
+                username={`@${selected.lead.instagram_username ?? ""}`}
+              />
 
               <WhatsAppLeadPanel
                 appMode={appMode}
@@ -445,15 +384,6 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
                 initialPhone={selected.lead.phone}
                 leadId={selected.lead.id}
               />
-
-              <div className="grid grid-cols-2 gap-2">
-                <ReviewAction action="partnership" icon={Handshake} label="Parceria" lane={selected.lane} lead={selected.lead} returnTo={returnTo} tone="bg-sky text-white" />
-                <ReviewAction action="nurture" icon={Clock3} label="Nutrir" lane={selected.lane} lead={selected.lead} returnTo={returnTo} tone="bg-[#f1f2ee] text-ink" />
-                <ReviewAction action="reject" icon={Trash2} label="Descartar" lane={selected.lane} lead={selected.lead} returnTo={returnTo} tone="bg-[#f1f2ee] text-ink" />
-                <div className="col-span-2">
-                  <ReviewAction action="do_not_contact" icon={Ban} label="Não contatar" lane={selected.lane} lead={selected.lead} returnTo={returnTo} tone="bg-coral text-white" />
-                </div>
-              </div>
 
               <div className="rounded-lg border border-black/10 bg-white">
                 <div className="border-b border-black/10 px-4 py-3 font-semibold">Pipeline e acompanhamento</div>
@@ -489,7 +419,9 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
           ) : (
             <div className="rounded-lg border border-black/10 bg-[#f7f8f5] p-6 text-sm text-ink/65">
               <AlertTriangle className="mb-3 h-5 w-5 text-coral" />
-              Nenhum lead encontrado para revisar.
+              {selectedStatus === "review_pending"
+                ? "Nenhum lead pendente na fila A revisar. Use o filtro Aprovados ou Todos os status para consultar leads já decididos."
+                : "Nenhum lead encontrado para esse filtro."}
             </div>
           )}
         </aside>

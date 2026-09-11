@@ -33,6 +33,25 @@ export type LeadStorageStats = {
   };
 };
 
+export type ApproveLeadInput = {
+  leadId: string;
+  lane: string;
+  username: string;
+  approvedMessage: string;
+};
+
+export type UpdateLeadReviewInput = {
+  leadId: string;
+  username: string;
+  action: string;
+  lane: string;
+};
+
+export type LeadReviewMutationResult = {
+  ok: boolean;
+  message: string;
+};
+
 type LeadProfileRow = {
   lead_id: string;
   public_snapshot: {
@@ -51,6 +70,21 @@ type ProspectingEventRow = {
     discoveryKeyword?: string | null;
   } | null;
 };
+
+const reviewCompletedStates = [
+  "approved_for_outreach",
+  "auto_outreach_qualified",
+  "outreach_prepared",
+  "operator_confirmation_required",
+  "contacted",
+  "whatsapp_prepared",
+  "whatsapp_contacted",
+  "whatsapp_replied",
+  "partnership_review",
+  "nurture_later",
+  "rejected",
+  "do_not_contact",
+];
 
 export async function listLeadsForReview(filters: LeadReviewFilters): Promise<DashboardLead[]> {
   const supabase = getSupabaseAdminClient();
@@ -74,14 +108,20 @@ export async function listLeadsForReview(filters: LeadReviewFilters): Promise<Da
     query = query.or(`instagram_username.ilike.${term},display_name.ilike.${term},bio.ilike.${term},discovery_keyword.ilike.${term}`);
   }
 
-  if (filters.status === "qualified" && !filters.minScore) {
+  const statusFilter = filters.status || "review_pending";
+
+  if (statusFilter === "review_pending") {
+    query = query.not("channel_state", "in", `("${reviewCompletedStates.join('","')}")`).or("do_not_contact.is.null,do_not_contact.eq.false");
+  } else if (statusFilter === "qualified" && !filters.minScore) {
     query = query.gte("lead_score", 50);
-  } else if (filters.status === "contacted") {
+  } else if (statusFilter === "approved") {
+    query = query.eq("channel_state", "approved_for_outreach");
+  } else if (statusFilter === "contacted") {
     query = query.in("channel_state", ["approved_for_outreach", "auto_outreach_qualified", "outreach_prepared", "operator_confirmation_required"]);
-  } else if (filters.status === "closed") {
+  } else if (statusFilter === "closed") {
     query = query.in("channel_state", ["rejected", "do_not_contact"]);
-  } else if (filters.status && filters.status !== "all") {
-    query = query.eq("channel_state", filters.status);
+  } else if (statusFilter !== "all") {
+    query = query.eq("channel_state", statusFilter);
   }
 
   if (filters.leadType && filters.leadType !== "all") {
@@ -257,21 +297,41 @@ export async function listLeadPipeline(leadId: string): Promise<LeadPipelineItem
 export async function approveLeadForOutreach(formData: FormData) {
   "use server";
 
-  const appMode = await getOperationalAppMode();
   const leadId = String(formData.get("leadId") ?? "");
   const lane = String(formData.get("lane") ?? "review");
   const username = String(formData.get("username") ?? "");
   const approvedMessage = String(formData.get("approvedMessage") ?? "").trim();
   const returnTo = getSafeReturnPath(formData);
 
-  if (!leadId) {
-    throw new Error("Lead ID is required");
-  }
+  const result = await approveLeadForOutreachRecord({
+    leadId,
+    lane,
+    username,
+    approvedMessage,
+  });
+
+  revalidatePath("/");
+  revalidatePath("/leads");
+  redirectWithNotice(returnTo, result.message);
+}
+
+export async function approveLeadForOutreachRecord(input: ApproveLeadInput): Promise<LeadReviewMutationResult> {
+  const appMode = await getOperationalAppMode();
 
   const supabase = getSupabaseAdminClient();
 
+  if (!input.leadId) {
+    return {
+      ok: false,
+      message: "Lead ID é obrigatório.",
+    };
+  }
+
   if (!supabase) {
-    throw new Error("Supabase is not configured");
+    return {
+      ok: false,
+      message: "Supabase não está configurado.",
+    };
   }
 
   const { error: leadError } = await supabase
@@ -281,19 +341,22 @@ export async function approveLeadForOutreach(formData: FormData) {
       human_review_required: false,
       updated_at: new Date().toISOString(),
     })
-    .eq("id", leadId);
+    .eq("id", input.leadId);
 
   if (leadError) {
-    throw leadError;
+    return {
+      ok: false,
+      message: leadError.message,
+    };
   }
 
-  const normalizedUsername = username.replace(/^@/, "");
+  const normalizedUsername = input.username.replace(/^@/, "");
   const conversationExternalId = `instagram:${normalizedUsername}`;
   const conversation = await supabase
     .from("conversations")
     .upsert(
       {
-        lead_id: leadId,
+        lead_id: input.leadId,
         channel: "browser",
         external_conversation_id: conversationExternalId,
         status: "open",
@@ -305,14 +368,17 @@ export async function approveLeadForOutreach(formData: FormData) {
     .single();
 
   if (conversation.error) {
-    throw conversation.error;
+    return {
+      ok: false,
+      message: conversation.error.message,
+    };
   }
 
-  const messageBody = approvedMessage || `Abordagem aprovada para ${username}.`;
+  const messageBody = input.approvedMessage || `Abordagem aprovada para ${input.username}.`;
   const messageResult = appMode === "dry_run" || appMode === "simulation" ? "dry_run_prepared_not_sent" : "queued_for_operator_confirmation";
   const { error: messageError } = await supabase.from("messages").insert({
     conversation_id: conversation.data.id,
-    lead_id: leadId,
+    lead_id: input.leadId,
     channel: "browser",
     direction: "outbound",
     body: messageBody,
@@ -321,40 +387,49 @@ export async function approveLeadForOutreach(formData: FormData) {
   });
 
   if (messageError) {
-    throw messageError;
+    return {
+      ok: false,
+      message: messageError.message,
+    };
   }
 
   const { error: eventError } = await supabase.from("lead_events").insert({
-    lead_id: leadId,
+    lead_id: input.leadId,
     event_type: "approved_for_outreach",
-    summary: `Lead ${username} aprovado para abordagem em ${lane}`,
+    summary: `Lead ${input.username} aprovado para abordagem em ${input.lane}`,
     payload: {
-      lane,
+      lane: input.lane,
       approvedBy: "operator",
-      approvedMessage,
+      approvedMessage: input.approvedMessage,
     },
   });
 
   if (eventError) {
-    throw eventError;
+    return {
+      ok: false,
+      message: eventError.message,
+    };
   }
 
   const { error: preparedEventError } = await supabase.from("lead_events").insert({
-    lead_id: leadId,
+    lead_id: input.leadId,
     event_type: "outreach_message_prepared",
     summary:
       appMode === "dry_run" || appMode === "simulation"
-        ? `Mensagem de abordagem preparada para ${username}; envio bloqueado pelo modo dry-run.`
-        : `Mensagem de abordagem preparada para ${username}; aguardando confirmação operacional.`,
+        ? `Mensagem de abordagem preparada para ${input.username}; envio bloqueado pelo modo dry-run.`
+        : `Mensagem de abordagem preparada para ${input.username}; aguardando confirmação operacional.`,
     payload: {
-      lane,
+      lane: input.lane,
       channel: "instagram",
       appMode,
     },
   });
 
   if (preparedEventError) {
-    throw preparedEventError;
+    return {
+      ok: false,
+      message: preparedEventError.message,
+    };
   }
 
   const followUpDate = new Date();
@@ -363,12 +438,12 @@ export async function approveLeadForOutreach(formData: FormData) {
     {
       type: "schedule_followup",
       status: "queued",
-      idempotency_key: `followup:${leadId}:first_contact`,
+      idempotency_key: `followup:${input.leadId}:first_contact`,
       max_attempts: 1,
       run_after: followUpDate.toISOString(),
       payload: {
-        leadId,
-        lane,
+        leadId: input.leadId,
+        lane: input.lane,
         channel: "instagram",
         reason: "Acompanhar resposta da primeira abordagem aprovada",
       },
@@ -377,12 +452,16 @@ export async function approveLeadForOutreach(formData: FormData) {
   );
 
   if (followUpError) {
-    throw followUpError;
+    return {
+      ok: false,
+      message: followUpError.message,
+    };
   }
 
-  revalidatePath("/");
-  revalidatePath("/leads");
-  redirectWithNotice(returnTo, "Abordagem aprovada, conversa criada e acompanhamento agendado no CRM.");
+  return {
+    ok: true,
+    message: "Abordagem aprovada, conversa criada e acompanhamento agendado no CRM.",
+  };
 }
 
 export async function updateLeadReviewState(formData: FormData) {
@@ -394,14 +473,33 @@ export async function updateLeadReviewState(formData: FormData) {
   const lane = String(formData.get("lane") ?? "review");
   const returnTo = getSafeReturnPath(formData);
 
-  if (!leadId) {
-    throw new Error("Lead ID is required");
+  const result = await updateLeadReviewStateRecord({
+    leadId,
+    username,
+    action,
+    lane,
+  });
+
+  revalidatePath("/");
+  revalidatePath("/leads");
+  redirectWithNotice(returnTo, result.message);
+}
+
+export async function updateLeadReviewStateRecord(input: UpdateLeadReviewInput): Promise<LeadReviewMutationResult> {
+  if (!input.leadId) {
+    return {
+      ok: false,
+      message: "Lead ID é obrigatório.",
+    };
   }
 
   const supabase = getSupabaseAdminClient();
 
   if (!supabase) {
-    throw new Error("Supabase is not configured");
+    return {
+      ok: false,
+      message: "Supabase não está configurado.",
+    };
   }
 
   const stateByAction: Record<string, { channel_state: string; human_review_required: boolean; do_not_contact?: boolean }> = {
@@ -412,9 +510,12 @@ export async function updateLeadReviewState(formData: FormData) {
     do_not_contact: { channel_state: "do_not_contact", human_review_required: false, do_not_contact: true },
   };
 
-  const nextState = stateByAction[action];
+  const nextState = stateByAction[input.action];
   if (!nextState) {
-    throw new Error("Invalid lead review action");
+    return {
+      ok: false,
+      message: "Ação inválida.",
+    };
   }
 
   const { error: leadError } = await supabase
@@ -423,37 +524,44 @@ export async function updateLeadReviewState(formData: FormData) {
       ...nextState,
       updated_at: new Date().toISOString(),
     })
-    .eq("id", leadId);
+    .eq("id", input.leadId);
 
   if (leadError) {
-    throw leadError;
+    return {
+      ok: false,
+      message: leadError.message,
+    };
   }
 
-  if (action === "do_not_contact") {
+  if (input.action === "do_not_contact") {
     await supabase.from("do_not_contact").upsert({
-      lead_id: leadId,
+      lead_id: input.leadId,
       reason: "Marcado manualmente na revisão de leads",
     });
   }
 
   const { error: eventError } = await supabase.from("lead_events").insert({
-    lead_id: leadId,
-    event_type: `review_${action}`,
-    summary: `Lead ${username} marcado como ${action}`,
+    lead_id: input.leadId,
+    event_type: `review_${input.action}`,
+    summary: `Lead ${input.username} marcado como ${input.action}`,
     payload: {
-      lane,
-      action,
+      lane: input.lane,
+      action: input.action,
       actor: "operator",
     },
   });
 
   if (eventError) {
-    throw eventError;
+    return {
+      ok: false,
+      message: eventError.message,
+    };
   }
 
-  revalidatePath("/");
-  revalidatePath("/leads");
-  redirectWithNotice(returnTo, actionNotice(action));
+  return {
+    ok: true,
+    message: actionNotice(input.action),
+  };
 }
 
 function getSafeReturnPath(formData: FormData) {

@@ -1,6 +1,23 @@
 import { salesDecisionSchema, type SalesDecision } from "@/features/conversations/agent-schema";
 import { getOpenAIClient, requireModel } from "@/integrations/openai/client";
 
+type ResponsesClient = {
+  responses: {
+    create(input: {
+      model: string;
+      input: Array<{ role: "system" | "user"; content: string }>;
+      text: {
+        format: {
+          type: "json_schema";
+          name: string;
+          strict: boolean;
+          schema: Record<string, unknown>;
+        };
+      };
+    }): Promise<{ output_text: string }>;
+  };
+};
+
 export async function createSalesDecision(input: {
   leadId: string;
   context: Record<string, unknown>;
@@ -21,7 +38,7 @@ export async function createSalesDecision(input: {
     };
   }
 
-  const response = await client.responses.create({
+  const response = await (client as unknown as ResponsesClient).responses.create({
     model: requireModel("fast"),
     input: [
       {

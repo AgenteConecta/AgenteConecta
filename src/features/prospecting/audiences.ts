@@ -23,8 +23,8 @@ export const prospectingAudiences: ProspectingAudience[] = [
   {
     id: "electricians",
     label: "Eletricistas",
-    description: "Profissionais de elétrica residencial que podem instalar ou indicar automação cabeada.",
-    keywords: ["eletricista residencial", "elétrica residencial", "instalação elétrica", "quadro elétrico", "infraestrutura elétrica"],
+    description: "Eletricistas residenciais que já atendem obras e podem agregar automação, Alexa, cortinas e controle por aplicativo.",
+    keywords: ["eletricista residencial", "elétrica residencial", "instalação elétrica residencial", "obras elétricas residenciais", "quadro elétrico residencial"],
   },
   {
     id: "electrical_influencers",

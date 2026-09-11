@@ -27,6 +27,7 @@
     "zod": "3.24.1"
   },
   "devDependencies": {
+    "@next/swc-win32-x64-msvc": "^15.5.25",
     "@rollup/rollup-win32-x64-msvc": "4.63.1",
     "@types/node": "22.10.2",
     "@types/react": "19.0.1",
@@ -38,5 +39,8 @@
     "tsx": "4.19.2",
     "typescript": "5.7.2",
     "vitest": "2.1.8"
+  },
+  "optionalDependencies": {
+    "@next/swc-win32-x64-msvc": "^15.5.25"
   }
 }

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { generateFirstContactMessage } from "@/features/conversations/first-contact";
+import { generateFirstContactMessageWithSavedCopy } from "@/features/conversations/first-contact";
 import { sendInitialInstagramDm } from "@/integrations/instagram/browser-worker";
 import { getSupabaseAdminClient } from "@/integrations/supabase/client";
 import { getOperationalAppMode } from "@/features/safety/app-mode";
@@ -362,7 +362,7 @@ async function createAutomaticOutreachMessage(lead: QualifiedLeadRow, followers:
     throw conversation.error;
   }
 
-  const message = generateFirstContactMessage(toLeadInput(lead, followers), toLeadScore(lead));
+  const message = await generateFirstContactMessageWithSavedCopy(toLeadInput(lead, followers), toLeadScore(lead));
   const { data, error } = await supabase
     .from("messages")
     .insert({

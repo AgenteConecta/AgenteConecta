@@ -1,4 +1,4 @@
-import { generateFirstContactMessage } from "@/features/conversations/first-contact";
+import { generateFirstContactMessageWithSavedCopy } from "@/features/conversations/first-contact";
 import { isOperationallyPaused } from "@/features/safety/operation-pause";
 import { getOperationalAppMode } from "@/features/safety/app-mode";
 import { sendEvolutionMessage } from "@/integrations/evolution/evolution-client";
@@ -109,7 +109,7 @@ export async function sendWhatsAppForLead(params: {
     };
   }
 
-  const body = params.message?.trim() || generateFirstContactMessage(toLeadInput(lead, phone), toLeadScore(lead));
+  const body = params.message?.trim() || (await generateFirstContactMessageWithSavedCopy(toLeadInput(lead, phone), toLeadScore(lead)));
   const conversationExternalId = `whatsapp:${phone}`;
   const conversation = await supabase
     .from("conversations")

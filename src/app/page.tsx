@@ -17,11 +17,13 @@ import {
   Smartphone,
 } from "lucide-react";
 import { formatBRL, loadBusinessConfig } from "@/lib/business-config";
-import { generateFirstContactMessage } from "@/features/conversations/first-contact";
+import { generateFirstContactMessageWithSavedCopy } from "@/features/conversations/first-contact";
+import { getCopyTemplates } from "@/features/conversations/copy-settings";
 import { requiredTables } from "@/db/schema-notes";
 import { getDashboardData } from "@/features/analytics/dashboard-data";
 import { AppShell } from "@/components/app-shell";
 import { ChromeInstagramControls } from "@/components/chrome-instagram-controls";
+import { CopyTemplatesPanel } from "@/components/copy-templates-panel";
 import { OperationalModeSwitch } from "@/components/operational-mode-switch";
 import { PauseControls } from "@/components/pause-controls";
 import { prospectingAudiences } from "@/features/prospecting/audiences";
@@ -279,6 +281,8 @@ function LeadStoragePanel({ stats, runs }: { stats: LeadStorageStats; runs: Pros
                     <span>Achados: {run.summary?.discovered ?? 0}</span>
                     <span>Novos: {run.summary?.persisted ?? 0}</span>
                     <span>Repetidos: {run.summary?.duplicates ?? 0}</span>
+                    <span>Pulados: {run.summary?.skippedKnown ?? 0}</span>
+                    <span>Meta: {run.summary?.targetNewLeads ?? "-"}</span>
                     <span>Erros: {run.summary?.errors ?? 0}</span>
                   </div>
                   <div className="text-xs text-ink/55">
@@ -331,7 +335,7 @@ const emptyLeadStorageStats: LeadStorageStats = {
 export default async function Home({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
   const business = loadBusinessConfig();
-  const [dashboard, approvedOutreachCount, automaticCandidateCount, appMode, pause, allLeads, leadStorageStats, recentProspectingRuns] = await Promise.all([
+  const [dashboard, approvedOutreachCount, automaticCandidateCount, appMode, pause, allLeads, leadStorageStats, recentProspectingRuns, copyTemplates] = await Promise.all([
     getDashboardData().catch(() => emptyDashboard),
     getApprovedOutreachCount().catch(() => 0),
     getAutomaticOutreachCandidateCount().catch(() => 0),
@@ -340,6 +344,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
     listLeadsForReview({}).catch(() => []),
     getLeadStorageStats().catch(() => emptyLeadStorageStats),
     listRecentProspectingRuns().catch(() => []),
+    getCopyTemplates().catch(() => ({ all: "", electricians: "" })),
   ]);
   const hotLead = dashboard.hotLead;
   const hotLeadInput = hotLead
@@ -352,7 +357,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
         discoveryKeyword: hotLead.discovery_keyword ?? undefined,
       }
     : sampleLead;
-  const firstMessage = generateFirstContactMessage(hotLeadInput, {
+  const firstMessage = await generateFirstContactMessageWithSavedCopy(hotLeadInput, {
     rawLeadScore: hotLead?.lead_score ?? 0,
     leadScore: hotLead?.lead_score ?? 0,
     commercialValueScore: hotLead?.commercial_value_score ?? 0,
@@ -411,6 +416,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
 
         <div className="space-y-6 px-5 py-6 md:px-8">
           <ProspectingLauncher action={queueProspectingRun} audiences={prospectingAudiences} />
+          <CopyTemplatesPanel templates={copyTemplates} />
           <LeadStoragePanel stats={leadStorageStats} runs={recentProspectingRuns} />
 
           <section className="grid gap-4 rounded-lg border border-black/10 bg-white p-5 shadow-panel lg:grid-cols-[1fr_360px]">

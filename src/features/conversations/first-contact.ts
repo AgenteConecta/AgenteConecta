@@ -1,7 +1,23 @@
 import type { LeadProfileInput, LeadScoreResult } from "@/lib/types";
+import { getCopyTemplates, renderCopyTemplate } from "@/features/conversations/copy-settings";
 
 export function generateFirstContactMessage(lead: LeadProfileInput, score: LeadScoreResult): string {
   return generateFirstContactVariants(lead, score)[0];
+}
+
+export async function generateFirstContactMessageWithSavedCopy(lead: LeadProfileInput, score: LeadScoreResult): Promise<string> {
+  return (await generateFirstContactVariantsWithSavedCopy(lead, score))[0];
+}
+
+export async function generateFirstContactVariantsWithSavedCopy(lead: LeadProfileInput, score: LeadScoreResult): Promise<string[]> {
+  const templates = await getCopyTemplates();
+  const savedTemplates = [
+    isElectricianLead(lead, score) ? templates.electricians : "",
+    templates.all,
+  ].filter(Boolean);
+  const savedVariants = await Promise.all(savedTemplates.map((template) => renderCopyTemplate(template, lead)));
+
+  return [...savedVariants, ...generateFirstContactVariants(lead, score)];
 }
 
 export function generateFirstContactVariants(lead: LeadProfileInput, score: LeadScoreResult): string[] {
@@ -36,11 +52,24 @@ export function generateFirstContactVariants(lead: LeadProfileInput, score: Lead
 
   if (score.leadType === "professional") {
     return [
-      `Olá, ${name}. Vi alguns trabalhos de elétrica residencial no seu perfil e acredito que automação residencial cabeada pode abrir uma frente interessante para seus projetos. Gostaria de te apresentar a solução Newtek e entender se existe espaço para parceria ou indicação.`,
+      `Olá, ${name}. Vi que você trabalha com elétrica residencial. Muitos eletricistas fazem toda a estrutura da obra, mas depois outra empresa entra para vender automação residencial, Alexa, cortinas e controle pelo app. A Newtek ajuda o eletricista a assumir também essa parte da obra. Posso te mostrar como funciona?`,
+      `Olá, ${name}. Vi que você trabalha com elétrica. Você sabia que pode usar os mesmos clientes e obras que já atende para começar a oferecer automação residencial e aumentar o valor dos seus projetos? A Newtek criou uma estrutura prática para ajudar profissionais de elétrica a entrar nesse mercado. Posso te mostrar rapidamente como funciona?`,
+      `Olá, ${name}. Vi que você trabalha na área elétrica. A Newtek criou uma plataforma para ajudar eletricistas a vender automação residencial de alto padrão, com treinamento, projetos, simulador, propostas, conteúdo com IA e suporte técnico. Posso te mostrar como funciona?`,
       authorityMessage,
       productMessage,
     ];
   }
 
   return [partnershipMessage, authorityMessage, productMessage];
+}
+
+function isElectricianLead(lead: LeadProfileInput, score: LeadScoreResult) {
+  const text = [lead.displayName, lead.bio, lead.category, lead.website, lead.discoveryKeyword, ...(lead.posts ?? [])]
+    .filter(Boolean)
+    .join(" ")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
+  return score.leadType === "professional" || text.includes("eletric");
 }

@@ -96,6 +96,40 @@ function toLeadInput(lead: DashboardLead) {
   };
 }
 
+function runSearchTerm(run: ProspectingRunSummary) {
+  return run.keywords.find((keyword) => keyword.trim().length > 0)?.trim() ?? "";
+}
+
+function runReviewUrl(run: ProspectingRunSummary) {
+  const params = new URLSearchParams({
+    lane: "all",
+    status: "review_pending",
+    type: "all",
+  });
+  const term = runSearchTerm(run);
+
+  if (term) {
+    params.set("q", term);
+  }
+
+  return `/leads?${params.toString()}`;
+}
+
+function runAllLeadsUrl(run: ProspectingRunSummary) {
+  const params = new URLSearchParams({
+    lane: "all",
+    status: "all",
+    type: "all",
+  });
+  const term = runSearchTerm(run);
+
+  if (term) {
+    params.set("q", term);
+  }
+
+  return `/leads?${params.toString()}`;
+}
+
 function laneForLead(lead: DashboardLead): ProspectingLane {
   const input = toLeadInput(lead);
   const computedScore = scoreLead(input);
@@ -267,7 +301,7 @@ function LeadStoragePanel({ stats, runs }: { stats: LeadStorageStats; runs: Pros
           {runs.length > 0 ? (
             <div className="divide-y divide-black/10">
               {runs.map((run) => (
-                <div className="grid gap-3 bg-[#f7f8f5] px-3 py-3 md:grid-cols-[1fr_130px_170px]" key={run.id}>
+                <div className="grid gap-3 bg-[#f7f8f5] px-3 py-3 md:grid-cols-[1fr_170px_170px]" key={run.id}>
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-semibold">{run.audienceLabel}</span>
@@ -275,6 +309,9 @@ function LeadStoragePanel({ stats, runs }: { stats: LeadStorageStats; runs: Pros
                     </div>
                     <div className="mt-1 truncate text-xs text-ink/55">{run.keywords.join(", ") || "sem palavras-chave"}</div>
                     {run.lastError ? <div className="mt-1 text-xs font-semibold text-coral">{run.lastError}</div> : null}
+                    {(run.summary?.discovered ?? 0) > 0 && (run.summary?.persisted ?? 0) === 0 ? (
+                      <div className="mt-1 text-xs font-semibold text-coral">Nenhum lead novo para aprovar: encontrados eram repetidos ou foram filtrados.</div>
+                    ) : null}
                   </div>
                   <div className="grid grid-cols-2 gap-1 text-xs text-ink/65">
                     <span>Achados: {run.summary?.discovered ?? 0}</span>
@@ -287,6 +324,14 @@ function LeadStoragePanel({ stats, runs }: { stats: LeadStorageStats; runs: Pros
                   <div className="text-xs text-ink/55">
                     <div>Início: {formatDateTime(run.createdAt)}</div>
                     <div>Atualizado: {formatDateTime(run.updatedAt)}</div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <a className="rounded-md border border-black/10 bg-white px-2 py-1 font-semibold text-pine hover:bg-mint" href={runReviewUrl(run)}>
+                        Aprovar novos
+                      </a>
+                      <a className="rounded-md border border-black/10 bg-white px-2 py-1 font-semibold text-pine hover:bg-mint" href={runAllLeadsUrl(run)}>
+                        Ver encontrados
+                      </a>
+                    </div>
                   </div>
                 </div>
               ))}

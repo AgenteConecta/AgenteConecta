@@ -33,8 +33,12 @@ export type ProspectingRunSummary = {
     minimumReached?: boolean;
     skippedKnown?: number;
     targetReached?: boolean;
+    diagnostics?: string[];
+    errorMessage?: string | null;
   } | null;
 };
+
+type ProspectingProgressSummary = NonNullable<ProspectingRunSummary["summary"]>;
 
 export async function queueProspectingRun(formData: FormData) {
   const audience = getProspectingAudience(String(formData.get("audience") ?? "auto"));
@@ -97,29 +101,31 @@ export async function queueProspectingRun(formData: FormData) {
   }
 
   const idempotencyKey = `discover:${searchMode}:${audienceId}:${idempotencySource.join("|").toLowerCase()}:${maxProfilesPerKeyword}:${minNewLeads}:${stopAtTarget ? targetNewLeads : "open"}:${new Date().toISOString()}`;
+  const payloadBase = {
+    audienceId,
+    searchMode,
+    audienceLabel,
+    keywords,
+    influencerProfiles,
+    maxProfilesPerKeyword,
+    minNewLeads,
+    targetNewLeads: stopAtTarget ? targetNewLeads : null,
+    targetNewQualifiedLeads: stopAtTarget ? targetNewLeads : null,
+    stopAtTarget,
+    autoContact,
+    minScore,
+    minFollowers,
+    batchSize,
+    source: "dashboard",
+    dryRun: appMode === "dry_run",
+  };
   const { data: job, error } = await supabase.from("jobs").upsert(
     {
       type: "discover_leads",
       status: "queued",
       idempotency_key: idempotencyKey,
       max_attempts: 1,
-      payload: {
-        audienceId,
-        searchMode,
-        audienceLabel,
-        keywords,
-        influencerProfiles,
-        maxProfilesPerKeyword,
-        minNewLeads,
-        targetNewLeads: stopAtTarget ? targetNewLeads : null,
-        stopAtTarget,
-        autoContact,
-        minScore,
-        minFollowers,
-        batchSize,
-        source: "dashboard",
-        dryRun: appMode === "dry_run",
-      },
+      payload: payloadBase,
     },
     { onConflict: "idempotency_key" },
   ).select("id").single();
@@ -140,6 +146,18 @@ export async function queueProspectingRun(formData: FormData) {
       minNewLeads,
       targetNewLeads: stopAtTarget ? targetNewLeads : null,
       knownUsernames: await getKnownInstagramUsernames(),
+      onProgress: async (progressSummary) => {
+        await supabase
+          .from("jobs")
+          .update({
+            payload: {
+              ...payloadBase,
+              summary: progressSummary,
+            },
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", job.id);
+      },
     });
     const outreachSummary = autoContact
       ? await runAutomaticQualifiedOutreach({
@@ -155,22 +173,7 @@ export async function queueProspectingRun(formData: FormData) {
         status: summary.paused ? "cancelled" : summary.errors > 0 && summary.persisted === 0 ? "dead" : "completed",
         last_error: summary.paused ? "Suspenso pela pausa operacional" : summary.minimumReached ? summary.errorMessage : `Mínimo não atingido: ${summary.persisted}/${summary.minNewLeads} qualificados novos salvos.`,
         payload: {
-          audienceId,
-          searchMode,
-          audienceLabel,
-          keywords,
-          influencerProfiles,
-          maxProfilesPerKeyword,
-          minNewLeads,
-          targetNewLeads: stopAtTarget ? targetNewLeads : null,
-          targetNewQualifiedLeads: stopAtTarget ? targetNewLeads : null,
-          stopAtTarget,
-          autoContact,
-          minScore,
-          minFollowers,
-          batchSize,
-          source: "dashboard",
-          dryRun: appMode === "dry_run",
+          ...payloadBase,
           summary,
         },
         updated_at: new Date().toISOString(),
@@ -199,6 +202,7 @@ async function runProspectingKeywords({
   minNewLeads,
   targetNewLeads,
   knownUsernames,
+  onProgress,
 }: {
   searchMode: "keywords" | "influencer_network";
   keywords: string[];
@@ -208,6 +212,7 @@ async function runProspectingKeywords({
   minNewLeads: number;
   targetNewLeads: number | null;
   knownUsernames: Set<string>;
+  onProgress?: (summary: ProspectingProgressSummary) => Promise<void>;
 }) {
   const summary = {
     discovered: 0,
@@ -226,14 +231,15 @@ async function runProspectingKeywords({
   };
 
   const searchEntries = searchMode === "influencer_network" ? influencerProfiles : keywords;
+  const searchRounds = buildSearchRounds(searchEntries, searchMode);
 
-  const maxRounds = targetNewLeads ? Math.max(8, Math.ceil(targetNewLeads / Math.max(searchEntries.length, 1)) * 6) : 1;
   let round = 0;
 
-  while (searchEntries.length > 0 && round < maxRounds) {
+  while (searchRounds.length > 0 && round < searchRounds.length) {
+    const roundEntries = searchRounds[round];
     round += 1;
 
-    for (const keyword of searchEntries) {
+    for (const keyword of roundEntries) {
       if (targetNewLeads && summary.persisted >= targetNewLeads) {
         summary.targetReached = true;
         break;
@@ -257,6 +263,7 @@ async function runProspectingKeywords({
 
       summary.discovered += discovered.length;
       summary.diagnostics.push(`rodada ${round} / ${keyword}: ${discovered.length} perfil(is) encontrado(s)`);
+      await onProgress?.(summary);
 
       for (const lead of discovered) {
         if (targetNewLeads && summary.persisted >= targetNewLeads) {
@@ -274,6 +281,7 @@ async function runProspectingKeywords({
           summary.duplicates += 1;
           summary.skippedKnown += 1;
           summary.diagnostics.push(`${lead.instagramUsername}: pulado porque já existe no CRM`);
+          await onProgress?.(summary);
           continue;
         }
 
@@ -294,6 +302,7 @@ async function runProspectingKeywords({
           summary.filteredOut += 1;
           summary.diagnostics.push(`${lead.instagramUsername}: filtrado antes de salvar por baixa aderência`);
           knownUsernames.add(normalizedUsername);
+          await onProgress?.(summary);
           continue;
         }
 
@@ -317,6 +326,7 @@ async function runProspectingKeywords({
           summary.persisted += 1;
           summary.minimumReached = summary.persisted >= minNewLeads;
           knownUsernames.add(normalizedUsername);
+          await onProgress?.(summary);
         }
       }
 
@@ -326,6 +336,7 @@ async function runProspectingKeywords({
     }
 
     summary.minimumReached = summary.persisted >= minNewLeads;
+    await onProgress?.(summary);
 
     if (summary.paused || summary.targetReached || !targetNewLeads) {
       break;
@@ -346,6 +357,53 @@ async function getKnownInstagramUsernames() {
   return new Set((data ?? []).map((lead) => normalizeInstagramUsername(String(lead.instagram_username ?? ""))).filter(Boolean));
 }
 
+function buildSearchRounds(entries: string[], searchMode: "keywords" | "influencer_network") {
+  const cleanEntries = entries.map((entry) => entry.trim()).filter(Boolean);
+
+  if (searchMode === "influencer_network") {
+    return chunkSearchEntries(cleanEntries, Math.max(cleanEntries.length, 1));
+  }
+
+  const modifiers = [
+    "",
+    "eletricista",
+    "integrador automação",
+    "instalador automação residencial",
+    "automação residencial cabeada",
+    "casa inteligente",
+    "smart home brasil",
+    "elétrica residencial",
+    "engenharia elétrica",
+    "arquitetura residencial",
+    "segurança eletrônica",
+    "São Paulo",
+    "Brasil",
+  ];
+
+  const expanded = modifiers.flatMap((modifier) =>
+    cleanEntries.map((entry) => {
+      if (!modifier) {
+        return entry;
+      }
+
+      return `${entry} ${modifier}`;
+    }),
+  );
+
+  const unique = expanded.filter((entry, index, all) => all.findIndex((item) => item.toLowerCase() === entry.toLowerCase()) === index);
+  return chunkSearchEntries(unique, Math.max(cleanEntries.length, 1));
+}
+
+function chunkSearchEntries(entries: string[], size: number) {
+  const chunks: string[][] = [];
+
+  for (let index = 0; index < entries.length; index += size) {
+    chunks.push(entries.slice(index, index + size));
+  }
+
+  return chunks;
+}
+
 function normalizeInstagramUsername(username: string) {
   return username.replace(/^@/, "").trim().toLowerCase();
 }
@@ -356,6 +414,18 @@ export async function listRecentProspectingRuns(): Promise<ProspectingRunSummary
   if (!supabase) {
     return [];
   }
+
+  const staleCutoff = new Date(Date.now() - 12 * 60 * 1000).toISOString();
+  await supabase
+    .from("jobs")
+    .update({
+      status: "dead",
+      last_error: "Busca expirada/interrompida. Inicie uma nova prospecção para continuar.",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("type", "discover_leads")
+    .in("status", ["queued", "running"])
+    .lt("updated_at", staleCutoff);
 
   const { data, error } = await supabase
     .from("jobs")

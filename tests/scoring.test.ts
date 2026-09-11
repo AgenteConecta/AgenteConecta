@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { scoreLead } from "@/features/scoring/scoring";
 import { generateFirstContactMessage } from "@/features/conversations/first-contact";
+import { renderCopyTemplate } from "@/features/conversations/copy-settings";
 
 describe("lead scoring", () => {
   it("scores a structured integrator as high value", () => {
@@ -45,5 +46,14 @@ describe("first contact", () => {
     expect(message).not.toContain("164");
     expect(message).not.toContain("297");
     expect(message).toContain("automação residencial");
+  });
+
+  it("renders saved copy placeholders with profile names", async () => {
+    const message = await renderCopyTemplate("Olá, {Nome}! Vi o perfil {canal} e quero falar com {username}.", {
+      instagramUsername: "@centro_oeste_manutencoes",
+      displayName: "Centro Oeste Manutenções Residenciais",
+    });
+
+    expect(message).toBe("Olá, Centro! Vi o perfil Centro Oeste Manutenções Residenciais e quero falar com @centro_oeste_manutencoes.");
   });
 });

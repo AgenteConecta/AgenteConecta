@@ -87,11 +87,14 @@ export async function saveCopyTemplateRecord(scope: CopyTemplateScope, copy: str
 
 export async function renderCopyTemplate(template: string, lead: { instagramUsername: string; displayName?: string }) {
   const username = lead.instagramUsername.startsWith("@") ? lead.instagramUsername : `@${lead.instagramUsername}`;
-  const name = lead.displayName?.split(" ").filter(Boolean)[0] || username.replace(/^@/, "");
+  const displayName = lead.displayName?.replace(/\s*[|•-]\s*Instagram.*$/i, "").trim();
+  const name = displayName?.split(" ").filter(Boolean)[0] || username.replace(/^@/, "");
 
   return template
-    .replaceAll("{nome}", name)
-    .replaceAll("{username}", username)
+    .replace(/\{nome\}/gi, name)
+    .replace(/\{canal\}/gi, displayName || name)
+    .replace(/\{perfil\}/gi, displayName || name)
+    .replace(/\{username\}/gi, username)
     .replaceAll("@fulano", username)
     .replaceAll("@usuario", username)
     .replaceAll("@usuário", username);

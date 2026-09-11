@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { generateFirstContactMessageWithSavedCopy } from "@/features/conversations/first-contact";
+import { renderCopyTemplate } from "@/features/conversations/copy-settings";
 import { sendInitialInstagramDm } from "@/integrations/instagram/browser-worker";
 import { getSupabaseAdminClient } from "@/integrations/supabase/client";
 import { getOperationalAppMode } from "@/features/safety/app-mode";
@@ -17,10 +18,12 @@ type PendingOutreachMessage = {
   leads:
     | {
         instagram_username: string | null;
+        display_name: string | null;
         do_not_contact: boolean | null;
       }
     | Array<{
         instagram_username: string | null;
+        display_name: string | null;
         do_not_contact: boolean | null;
       }>
     | null;
@@ -170,7 +173,7 @@ export async function processApprovedOutreach(formData: FormData) {
 
   const { data, error } = await supabase
     .from("messages")
-    .select("id, lead_id, body, result, leads(instagram_username, do_not_contact)")
+    .select("id, lead_id, body, result, leads(instagram_username, display_name, do_not_contact)")
     .eq("channel", "browser")
     .eq("direction", "outbound")
     .eq("message_variant", "first_contact_approved")
@@ -203,11 +206,15 @@ export async function processApprovedOutreach(formData: FormData) {
 
     const profileUrl = `https://www.instagram.com/${username.replace(/^@/, "")}/`;
     const idempotencyKey = `instagram-first-contact:${message.id}`;
+    const renderedMessage = await renderCopyTemplate(message.body, {
+      instagramUsername: username,
+      displayName: lead?.display_name ?? username,
+    });
 
     try {
       const result = await sendInitialInstagramDm({
         profileUrl,
-        message: message.body,
+        message: renderedMessage,
         idempotencyKey,
       });
       const sentAt = result.sentAt ? new Date(result.sentAt).toISOString() : null;
@@ -485,7 +492,7 @@ async function processMessageById(messageId: string) {
 
   const { data, error } = await supabase
     .from("messages")
-    .select("id, lead_id, body, result, leads(instagram_username, do_not_contact)")
+    .select("id, lead_id, body, result, leads(instagram_username, display_name, do_not_contact)")
     .eq("id", messageId)
     .single();
 
@@ -503,9 +510,13 @@ async function processMessageById(messageId: string) {
   }
 
   try {
+    const renderedMessage = await renderCopyTemplate(message.body, {
+      instagramUsername: username,
+      displayName: lead?.display_name ?? username,
+    });
     const result = await sendInitialInstagramDm({
       profileUrl: `https://www.instagram.com/${username.replace(/^@/, "")}/`,
-      message: message.body,
+      message: renderedMessage,
       idempotencyKey: `instagram-auto-first-contact:${message.id}`,
     });
     await supabase

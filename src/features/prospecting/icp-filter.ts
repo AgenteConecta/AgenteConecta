@@ -24,7 +24,37 @@ const audienceTerms: Record<string, string[]> = {
   equipment: ["loja de elétrica", "loja de eletrica", "material elétrico", "material eletrico", "revenda", "distribuidora", "fornecedor", "equipamentos", "automação", "automacao"],
 };
 
-const unrelatedTerms = ["blog pessoal", "moda", "beleza", "maquiagem", "receitas", "viagem", "meme", "humor", "fitness", "academia", "jogo", "games", "notícia", "noticia"];
+const unrelatedTerms = [
+  "blog pessoal",
+  "moda",
+  "beleza",
+  "maquiagem",
+  "receitas",
+  "viagem",
+  "meme",
+  "humor",
+  "fitness",
+  "academia",
+  "jogo",
+  "games",
+  "notícia",
+  "noticia",
+  "médico",
+  "medico",
+  "médica",
+  "medica",
+  "medicina",
+  "radiologia",
+  "neurorradio",
+  "neuroradio",
+  "hospital",
+  "clínica",
+  "clinica",
+  "odontologia",
+  "dentista",
+  "advogado",
+  "advocacia",
+];
 
 const adultOrEscortTerms = [
   "garota de programa",
@@ -81,6 +111,11 @@ export function hasAudienceIcpSignal(lead: LeadProfileInput, audienceId: string)
 
   const terms = audienceTerms[audienceId] ?? audienceTerms.auto;
   const score = scoreLead(lead);
+  const hasConfiguredAudienceTerm = terms.some((term) => text.includes(normalize(term)));
 
-  return terms.some((term) => text.includes(normalize(term))) || score.leadScore >= 25;
+  if (audienceId !== "auto") {
+    return hasConfiguredAudienceTerm;
+  }
+
+  return hasConfiguredAudienceTerm || score.leadScore >= 35;
 }

@@ -46,4 +46,18 @@ describe("ICP prospecting filter", () => {
       ),
     ).toBe(false);
   });
+
+  it("blocks medical profiles captured during electrician searches", () => {
+    expect(
+      hasAudienceIcpSignal(
+        {
+          instagramUsername: "@pedrolhermusieau",
+          displayName: "Pedro Lhermusieau",
+          bio: "Médico Radiologia Neurorradio",
+          discoveryKeyword: "automação residencial eletricista",
+        },
+        "electricians",
+      ),
+    ).toBe(false);
+  });
 });

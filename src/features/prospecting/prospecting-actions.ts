@@ -7,7 +7,7 @@ import { getProspectingAudience, parseCustomKeywords } from "@/features/prospect
 import { generateFirstContactMessage } from "@/features/conversations/first-contact";
 import { persistDiscoveredLead } from "@/features/leads/lead-repository";
 import { hasMinimumIcpSignal } from "@/features/prospecting/icp-filter";
-import { discoverProfilesFromHashtag, discoverProfilesFromInfluencerNetwork, readInstagramPublicProfile } from "@/integrations/instagram/browser-worker";
+import { discoverProfilesFromHashtag, discoverProfilesFromInfluencerNetwork, isInstagramRateLimitError, readInstagramPublicProfile } from "@/integrations/instagram/browser-worker";
 import { runAutomaticQualifiedOutreach } from "@/features/outreach/outreach-actions";
 import { getOperationalAppMode } from "@/features/safety/app-mode";
 import { isOperationallyPaused } from "@/features/safety/operation-pause";
@@ -31,6 +31,7 @@ export type ProspectingRunSummary = {
     minNewLeads?: number | null;
     targetNewLeads?: number | null;
     minimumReached?: boolean;
+    rateLimited?: boolean;
     skippedKnown?: number;
     targetReached?: boolean;
     diagnostics?: string[];
@@ -159,6 +160,14 @@ export async function queueProspectingRun(formData: FormData) {
           .eq("id", job.id);
       },
     });
+    const finalStatus = summary.paused ? "cancelled" : summary.rateLimited || (summary.errors > 0 && summary.persisted === 0) ? "dead" : "completed";
+    const finalError = summary.paused
+      ? "Suspenso pela pausa operacional"
+      : summary.rateLimited
+        ? "Instagram limitou temporariamente a automação (HTTP 429). Aguarde alguns minutos antes de pesquisar novamente."
+        : summary.minimumReached
+          ? summary.errorMessage
+          : `Mínimo não atingido: ${summary.persisted}/${summary.minNewLeads} qualificados novos salvos.`;
     const outreachSummary = autoContact
       ? await runAutomaticQualifiedOutreach({
           minScore,
@@ -170,8 +179,8 @@ export async function queueProspectingRun(formData: FormData) {
     await supabase
       .from("jobs")
       .update({
-        status: summary.paused ? "cancelled" : summary.errors > 0 && summary.persisted === 0 ? "dead" : "completed",
-        last_error: summary.paused ? "Suspenso pela pausa operacional" : summary.minimumReached ? summary.errorMessage : `Mínimo não atingido: ${summary.persisted}/${summary.minNewLeads} qualificados novos salvos.`,
+        status: finalStatus,
+        last_error: finalError,
         payload: {
           ...payloadBase,
           summary,
@@ -184,8 +193,9 @@ export async function queueProspectingRun(formData: FormData) {
     revalidatePath("/leads");
     const emptyReason = summary.discovered === 0 ? " Nenhum perfil foi capturado no Instagram para essas buscas; tente palavras mais amplas ou verifique se o Chrome logado está carregando resultados." : "";
     const minimumReason = summary.minimumReached ? "" : ` Atenção: mínimo não atingido (${summary.persisted}/${summary.minNewLeads}); repetidos e leads já salvos não contam.`;
+    const rateLimitReason = summary.rateLimited ? " Instagram limitou temporariamente a automação (HTTP 429). Aguarde alguns minutos antes de pesquisar de novo." : "";
     redirectWithNotice(
-      `Prospecção concluída (${searchMode === "influencer_network" ? "rede de influenciador" : "buscas por termos"}): ${summary.discovered} encontrados, ${summary.persisted} novos qualificados salvos, ${summary.duplicates} repetidos, ${summary.skippedKnown} já conhecidos pulados, ${summary.filteredOut} filtrados, ${summary.errors} erros. Mínimo: ${summary.minNewLeads}. Máximo: ${summary.targetNewLeads ?? "sem limite"} qualificados${summary.targetReached ? " (atingido)" : ""}.${minimumReason} Contato automático: ${outreachSummary.prepared} criados, ${outreachSummary.processed} processados.${saveConfig ? " Configuração salva para próximas pesquisas." : ""}${emptyReason}`,
+      `Prospecção concluída (${searchMode === "influencer_network" ? "rede de influenciador" : "buscas por termos"}): ${summary.discovered} encontrados, ${summary.persisted} novos qualificados salvos, ${summary.duplicates} repetidos, ${summary.skippedKnown} já conhecidos pulados, ${summary.filteredOut} filtrados, ${summary.errors} erros. Mínimo: ${summary.minNewLeads}. Máximo: ${summary.targetNewLeads ?? "sem limite"} qualificados${summary.targetReached ? " (atingido)" : ""}.${minimumReason}${rateLimitReason} Contato automático: ${outreachSummary.prepared} criados, ${outreachSummary.processed} processados.${saveConfig ? " Configuração salva para próximas pesquisas." : ""}${emptyReason}`,
     );
   }
 
@@ -225,6 +235,7 @@ async function runProspectingKeywords({
     minNewLeads,
     targetNewLeads,
     minimumReached: false,
+    rateLimited: false,
     targetReached: false,
     diagnostics: [] as string[],
     errorMessage: null as string | null,
@@ -251,13 +262,14 @@ async function runProspectingKeywords({
       }
 
       const remainingTarget = targetNewLeads ? Math.max(targetNewLeads - summary.persisted, 1) : maxProfilesPerKeyword;
-      const profilesToRequest = Math.min(Math.max(maxProfilesPerKeyword, Math.ceil(remainingTarget * 2.5), 15), 50);
+      const profilesToRequest = Math.min(Math.max(maxProfilesPerKeyword, Math.ceil(remainingTarget * 1.5), 8), 24);
       const discovered = await (searchMode === "influencer_network"
         ? discoverProfilesFromInfluencerNetwork({ profile: keyword, audienceLabel, maxProfiles: profilesToRequest })
         : discoverProfilesFromHashtag({ keyword, maxProfiles: profilesToRequest })
       ).catch((error: unknown) => {
         summary.errors += 1;
         summary.errorMessage = error instanceof Error ? error.message : "Erro desconhecido ao pesquisar no Instagram.";
+        summary.rateLimited = isInstagramRateLimitError(error);
         return [];
       });
 
@@ -333,12 +345,16 @@ async function runProspectingKeywords({
       if (summary.paused) {
         break;
       }
+
+      if (summary.rateLimited) {
+        break;
+      }
     }
 
     summary.minimumReached = summary.persisted >= minNewLeads;
     await onProgress?.(summary);
 
-    if (summary.paused || summary.targetReached || !targetNewLeads) {
+    if (summary.paused || summary.rateLimited || summary.targetReached || !targetNewLeads) {
       break;
     }
   }
@@ -371,13 +387,6 @@ function buildSearchRounds(entries: string[], searchMode: "keywords" | "influenc
     "instalador automação residencial",
     "automação residencial cabeada",
     "casa inteligente",
-    "smart home brasil",
-    "elétrica residencial",
-    "engenharia elétrica",
-    "arquitetura residencial",
-    "segurança eletrônica",
-    "São Paulo",
-    "Brasil",
   ];
 
   const expanded = modifiers.flatMap((modifier) =>

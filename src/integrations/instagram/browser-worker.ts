@@ -7,6 +7,17 @@ import type { LeadProfileInput } from "@/lib/types";
 const allowedHosts = new Set(["instagram.com", "www.instagram.com"]);
 const blockedUsernameSegments = new Set(["explore", "p", "reel", "reels", "accounts", "about", "direct", "legal", "privacy", "web", "popular"]);
 
+export class InstagramRateLimitError extends Error {
+  constructor(url: string) {
+    super(`Instagram limitou temporariamente a automação (HTTP 429) em ${url}. Aguarde alguns minutos antes de pesquisar novamente.`);
+    this.name = "InstagramRateLimitError";
+  }
+}
+
+export function isInstagramRateLimitError(error: unknown) {
+  return error instanceof InstagramRateLimitError || (error instanceof Error && /429|rate limit|too many requests/i.test(error.message));
+}
+
 export function assertInstagramUrl(url: string): void {
   const parsed = new URL(url);
   if (!allowedHosts.has(parsed.hostname)) {
@@ -143,7 +154,7 @@ export async function discoverProfilesFromHashtag(params: {
         continue;
       }
 
-      await page.waitForTimeout(3500);
+      await page.waitForTimeout(5000);
 
       const loggedOut = await page.evaluate(() => {
         const text = document.body.textContent?.toLowerCase() ?? "";
@@ -166,7 +177,7 @@ export async function discoverProfilesFromHashtag(params: {
           .map((anchor) => anchor.href)
           .filter((href, index, all) => all.indexOf(href) === index)
           .slice(0, limit);
-      }, params.maxProfiles);
+      }, Math.min(params.maxProfiles, 6));
 
       for (const postUrl of postUrls) {
         assertInstagramUrl(postUrl);
@@ -176,7 +187,7 @@ export async function discoverProfilesFromHashtag(params: {
           continue;
         }
 
-        await page.waitForTimeout(1800);
+        await page.waitForTimeout(3000);
 
         const username = (await collectVisibleUsernames(page, 3))[0] ?? null;
 
@@ -228,7 +239,7 @@ export async function discoverProfilesFromInfluencerNetwork(params: {
       return [];
     }
 
-    await page.waitForTimeout(3000);
+    await page.waitForTimeout(5000);
 
     const loggedOut = await page.evaluate(() => {
       const text = document.body.textContent?.toLowerCase() ?? "";
@@ -248,7 +259,7 @@ export async function discoverProfilesFromInfluencerNetwork(params: {
         .map((anchor) => anchor.href)
         .filter((href, index, all) => all.indexOf(href) === index)
         .slice(0, limit);
-    }, Math.min(params.maxProfiles, 12));
+    }, Math.min(params.maxProfiles, 6));
 
     for (const postUrl of postUrls) {
       if (usernames.length >= params.maxProfiles) {
@@ -262,7 +273,7 @@ export async function discoverProfilesFromInfluencerNetwork(params: {
         continue;
       }
 
-      await page.waitForTimeout(1800);
+      await page.waitForTimeout(3000);
       addUsernames(usernames, await collectVisibleUsernames(page, params.maxProfiles * 2), params.maxProfiles, ownUsername);
       await scrollAndCollectUsernames(page, usernames, params.maxProfiles, ownUsername, 2);
     }
@@ -288,7 +299,7 @@ async function collectFromInstagramSearchPanel(page: Page, keyword: string, user
     return;
   }
 
-  await page.waitForTimeout(1800);
+  await page.waitForTimeout(3000);
 
   const searchTrigger = page
     .locator('a[aria-label*="Search"], a[aria-label*="Pesquisar"], button[aria-label*="Search"], button[aria-label*="Pesquisar"], svg[aria-label*="Search"], svg[aria-label*="Pesquisar"]')
@@ -302,16 +313,16 @@ async function collectFromInstagramSearchPanel(page: Page, keyword: string, user
 
   if ((await searchInput.count()) > 0) {
     await searchInput.fill(keyword, { timeout: 7000 }).catch(() => undefined);
-    await page.waitForTimeout(3500);
+    await page.waitForTimeout(5000);
     addUsernames(usernames, await collectVisibleUsernames(page, limit * 4), limit, ownUsername);
     await scrollAndCollectUsernames(page, usernames, limit, ownUsername);
   }
 }
 
-async function scrollAndCollectUsernames(page: Page, usernames: string[], limit: number, ownUsername: string, maxScrolls = 5) {
+async function scrollAndCollectUsernames(page: Page, usernames: string[], limit: number, ownUsername: string, maxScrolls = 3) {
   for (let index = 0; index < maxScrolls && usernames.length < limit; index += 1) {
     await page.evaluate(() => window.scrollBy(0, Math.max(window.innerHeight * 0.9, 600))).catch(() => undefined);
-    await page.waitForTimeout(1200);
+    await page.waitForTimeout(2200);
     addUsernames(usernames, await collectVisibleUsernames(page, limit * 4), limit, ownUsername);
   }
 }
@@ -320,9 +331,24 @@ async function gotoInstagramPage(page: Page, url: string, timeout = 45000) {
   assertInstagramUrl(url);
 
   try {
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout });
+    const response = await page.goto(url, { waitUntil: "domcontentloaded", timeout });
+    const status = response?.status() ?? 200;
+
+    if (status === 429) {
+      throw new InstagramRateLimitError(url);
+    }
+
+    if (status >= 400) {
+      return false;
+    }
+
+    await page.waitForTimeout(900);
     return true;
-  } catch {
+  } catch (error) {
+    if (isInstagramRateLimitError(error)) {
+      throw error;
+    }
+
     return false;
   }
 }

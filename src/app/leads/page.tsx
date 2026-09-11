@@ -199,8 +199,8 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
         </div>
       </header>
 
-      <div className="grid min-h-[calc(100vh-89px)] grid-cols-1 xl:grid-cols-[minmax(680px,1fr)_420px]">
-        <section className="border-r border-black/10 px-5 py-5 md:px-8">
+      <div className="min-h-[calc(100vh-89px)]">
+        <section className="px-5 py-5 md:px-8">
           <form className="grid gap-3 border-b border-black/10 pb-4 md:grid-cols-[1fr_150px_210px_180px_170px_auto]">
             <label className="flex h-10 items-center gap-2 rounded-md border border-black/10 bg-white px-3">
               <Search className="h-4 w-4 text-ink/45" />
@@ -303,9 +303,9 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
           </div>
         </section>
 
-        <aside className="bg-white px-5 py-5 md:px-6">
+        <aside className="border-t border-black/10 bg-white px-5 py-5 md:px-8">
           {selected ? (
-            <div className="sticky top-0 space-y-5">
+            <div className="mx-auto max-w-5xl space-y-5">
               <div>
                 <div className="flex items-start justify-between gap-3">
                   <div>

@@ -60,8 +60,10 @@ export function ProspectingLauncher({ action, audiences, defaults }: Prospecting
         },
       ];
   const [editableAudiences, setEditableAudiences] = useState<EditableAudience[]>(initialAudience);
+  const [searchMode, setSearchMode] = useState<"keywords" | "influencer_network">(defaults.searchMode);
   const [selectedId, setSelectedId] = useState(defaults.audienceId || audiences[0]?.id || "auto");
   const [keywords, setKeywords] = useState(defaults.keywords.join("\n") || audiences[0]?.keywords.join("\n") || "");
+  const [influencerProfiles, setInfluencerProfiles] = useState(defaults.influencerProfiles.join("\n"));
   const [newKeyword, setNewKeyword] = useState("");
   const [newAudienceName, setNewAudienceName] = useState("");
   const [newAudienceKeywords, setNewAudienceKeywords] = useState("");
@@ -169,12 +171,29 @@ export function ProspectingLauncher({ action, audiences, defaults }: Prospecting
       </div>
 
       <form action={action} className="grid gap-3">
+        <input name="searchMode" type="hidden" value={searchMode} />
         <input name="audience" type="hidden" value={selectedAudience?.id ?? "auto"} />
         <input name="audienceLabel" type="hidden" value={selectedAudience?.label ?? "Automático recomendado"} />
         <label className="grid gap-2">
           <span className="text-xs font-semibold uppercase text-ink/45">Público selecionado</span>
           <input className="h-10 rounded-md border border-black/10 bg-[#f7f8f5] px-3 text-sm" readOnly value={selectedAudience?.label ?? ""} />
         </label>
+        <div className="grid gap-2 rounded-md border border-black/10 bg-[#f7f8f5] p-3 sm:grid-cols-2">
+          <button
+            className={`h-10 rounded-md px-3 text-sm font-medium transition ${searchMode === "keywords" ? "bg-pine text-white" : "border border-black/10 bg-white text-ink/70"}`}
+            onClick={() => setSearchMode("keywords")}
+            type="button"
+          >
+            Hashtags e buscas
+          </button>
+          <button
+            className={`h-10 rounded-md px-3 text-sm font-medium transition ${searchMode === "influencer_network" ? "bg-pine text-white" : "border border-black/10 bg-white text-ink/70"}`}
+            onClick={() => setSearchMode("influencer_network")}
+            type="button"
+          >
+            Rede de influenciador
+          </button>
+        </div>
         <label className="grid gap-2">
           <span className="text-xs font-semibold uppercase text-ink/45">Buscas sugeridas ou personalizadas</span>
           <textarea
@@ -184,6 +203,20 @@ export function ProspectingLauncher({ action, audiences, defaults }: Prospecting
             value={keywords}
           />
         </label>
+        {searchMode === "influencer_network" ? (
+          <label className="grid gap-2">
+            <span className="text-xs font-semibold uppercase text-ink/45">Perfis-base de influenciadores</span>
+            <textarea
+              className="min-h-24 rounded-md border border-black/10 bg-white px-3 py-3 text-sm leading-6 outline-none focus:border-pine"
+              name="influencerProfiles"
+              onChange={(event) => setInfluencerProfiles(event.target.value)}
+              placeholder={"@vitrine.eletronica\n@af_eletrica\nhttps://www.instagram.com/exemplo/"}
+              value={influencerProfiles}
+            />
+          </label>
+        ) : (
+          <input name="influencerProfiles" type="hidden" value={influencerProfiles} />
+        )}
         <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
           <input
             className="h-10 rounded-md border border-black/10 bg-white px-3 text-sm outline-none focus:border-pine"

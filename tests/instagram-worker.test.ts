@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hashtagUrl, parseInstagramFollowerCount } from "@/integrations/instagram/browser-worker";
+import { hashtagUrl, normalizeInstagramUsername, parseInstagramFollowerCount } from "@/integrations/instagram/browser-worker";
 
 describe("instagram worker", () => {
   it("builds safe hashtag URLs from Portuguese keywords", () => {
@@ -11,5 +11,10 @@ describe("instagram worker", () => {
     expect(parseInstagramFollowerCount("250K followers")).toBe(250000);
     expect(parseInstagramFollowerCount("12,5K seguidores")).toBe(12500);
     expect(parseInstagramFollowerCount("1.2M followers")).toBe(1200000);
+  });
+
+  it("normalizes influencer profile inputs", () => {
+    expect(normalizeInstagramUsername("@vitrine.eletronica")).toBe("vitrine.eletronica");
+    expect(normalizeInstagramUsername("https://www.instagram.com/af_eletrica/?hl=pt-br")).toBe("af_eletrica");
   });
 });

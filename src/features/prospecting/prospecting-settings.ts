@@ -3,9 +3,11 @@ import path from "node:path";
 import { getSupabaseAdminClient } from "@/integrations/supabase/client";
 
 export type ProspectingDefaults = {
+  searchMode: "keywords" | "influencer_network";
   audienceId: string;
   audienceLabel: string;
   keywords: string[];
+  influencerProfiles: string[];
   targetNewLeads: number;
   maxProfilesPerKeyword: number;
   stopAtTarget: boolean;
@@ -19,9 +21,11 @@ const runtimeSettingsPath = path.join(process.cwd(), ".runtime-settings.json");
 const settingsKey = "prospecting_defaults";
 
 const defaultProspectingDefaults: ProspectingDefaults = {
+  searchMode: "keywords",
   audienceId: "auto",
   audienceLabel: "Automático recomendado",
   keywords: ["automação residencial", "casa inteligente", "automação cabeada", "arquitetura residencial", "elétrica residencial"],
+  influencerProfiles: [],
   targetNewLeads: 50,
   maxProfilesPerKeyword: 15,
   stopAtTarget: true,
@@ -105,8 +109,10 @@ async function writeLocalProspectingDefaults(prospectingDefaults: ProspectingDef
 function normalizeProspectingDefaults(value: Partial<ProspectingDefaults>): ProspectingDefaults {
   return {
     audienceId: typeof value.audienceId === "string" && value.audienceId ? value.audienceId : defaultProspectingDefaults.audienceId,
+    searchMode: value.searchMode === "influencer_network" ? "influencer_network" : "keywords",
     audienceLabel: typeof value.audienceLabel === "string" && value.audienceLabel ? value.audienceLabel : defaultProspectingDefaults.audienceLabel,
     keywords: Array.isArray(value.keywords) && value.keywords.length > 0 ? value.keywords.map(String).filter(Boolean).slice(0, 12) : defaultProspectingDefaults.keywords,
+    influencerProfiles: Array.isArray(value.influencerProfiles) ? value.influencerProfiles.map(String).filter(Boolean).slice(0, 12) : defaultProspectingDefaults.influencerProfiles,
     targetNewLeads: clampNumber(value.targetNewLeads, 1, 300, defaultProspectingDefaults.targetNewLeads),
     maxProfilesPerKeyword: clampNumber(value.maxProfilesPerKeyword, 1, 50, defaultProspectingDefaults.maxProfilesPerKeyword),
     stopAtTarget: typeof value.stopAtTarget === "boolean" ? value.stopAtTarget : defaultProspectingDefaults.stopAtTarget,

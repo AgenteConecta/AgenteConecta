@@ -7,7 +7,7 @@ import { getProspectingAudience, parseCustomKeywords } from "@/features/prospect
 import { generateFirstContactMessage } from "@/features/conversations/first-contact";
 import { persistDiscoveredLead } from "@/features/leads/lead-repository";
 import { hasMinimumIcpSignal } from "@/features/prospecting/icp-filter";
-import { discoverProfilesFromHashtag, readInstagramPublicProfile } from "@/integrations/instagram/browser-worker";
+import { discoverProfilesFromHashtag, discoverProfilesFromInfluencerNetwork, readInstagramPublicProfile } from "@/integrations/instagram/browser-worker";
 import { runAutomaticQualifiedOutreach } from "@/features/outreach/outreach-actions";
 import { getOperationalAppMode } from "@/features/safety/app-mode";
 import { isOperationallyPaused } from "@/features/safety/operation-pause";
@@ -38,7 +38,9 @@ export async function queueProspectingRun(formData: FormData) {
   const audience = getProspectingAudience(String(formData.get("audience") ?? "auto"));
   const audienceId = String(formData.get("audience") ?? audience.id);
   const audienceLabel = String(formData.get("audienceLabel") ?? audience.label).trim() || audience.label;
+  const searchMode = String(formData.get("searchMode") ?? "keywords") === "influencer_network" ? "influencer_network" : "keywords";
   const customKeywords = parseCustomKeywords(String(formData.get("keywords") ?? ""));
+  const influencerProfiles = parseCustomKeywords(String(formData.get("influencerProfiles") ?? ""));
   const maxProfilesRaw = Number(formData.get("maxProfiles") ?? 15);
   const maxProfilesPerKeyword = Math.max(1, Math.min(Number.isFinite(maxProfilesRaw) ? maxProfilesRaw : 15, 50));
   const targetNewLeadsRaw = Number(formData.get("targetNewLeads") ?? 50);
@@ -59,8 +61,10 @@ export async function queueProspectingRun(formData: FormData) {
   if (saveConfig) {
     await saveProspectingDefaults({
       audienceId,
+      searchMode,
       audienceLabel,
       keywords,
+      influencerProfiles,
       targetNewLeads,
       maxProfilesPerKeyword,
       stopAtTarget,
@@ -81,7 +85,8 @@ export async function queueProspectingRun(formData: FormData) {
     redirectWithNotice("Supabase não está configurado. A prospecção não foi enfileirada.");
   }
 
-  const idempotencyKey = `discover:${audienceId}:${keywords.join("|").toLowerCase()}:${maxProfilesPerKeyword}:${stopAtTarget ? targetNewLeads : "open"}:${new Date().toISOString().slice(0, 13)}`;
+  const idempotencySource = searchMode === "influencer_network" ? influencerProfiles : keywords;
+  const idempotencyKey = `discover:${searchMode}:${audienceId}:${idempotencySource.join("|").toLowerCase()}:${maxProfilesPerKeyword}:${stopAtTarget ? targetNewLeads : "open"}:${new Date().toISOString().slice(0, 13)}`;
   const { data: job, error } = await supabase.from("jobs").upsert(
     {
       type: "discover_leads",
@@ -90,8 +95,10 @@ export async function queueProspectingRun(formData: FormData) {
       max_attempts: 1,
       payload: {
         audienceId,
+        searchMode,
         audienceLabel,
         keywords,
+        influencerProfiles,
         maxProfilesPerKeyword,
         targetNewLeads: stopAtTarget ? targetNewLeads : null,
         stopAtTarget,
@@ -114,7 +121,10 @@ export async function queueProspectingRun(formData: FormData) {
     await supabase.from("jobs").update({ status: "running", updated_at: new Date().toISOString() }).eq("id", job.id);
 
     const summary = await runProspectingKeywords({
+      searchMode,
       keywords,
+      influencerProfiles,
+      audienceLabel,
       maxProfilesPerKeyword,
       targetNewLeads: stopAtTarget ? targetNewLeads : null,
       knownUsernames: await getKnownInstagramUsernames(),
@@ -134,8 +144,10 @@ export async function queueProspectingRun(formData: FormData) {
         last_error: summary.paused ? "Suspenso pela pausa operacional" : summary.errorMessage,
         payload: {
           audienceId,
+          searchMode,
           audienceLabel,
           keywords,
+          influencerProfiles,
           maxProfilesPerKeyword,
           targetNewLeads: stopAtTarget ? targetNewLeads : null,
           stopAtTarget,
@@ -155,21 +167,27 @@ export async function queueProspectingRun(formData: FormData) {
     revalidatePath("/leads");
     const emptyReason = summary.discovered === 0 ? " Nenhum perfil foi capturado no Instagram para essas buscas; tente palavras mais amplas ou verifique se o Chrome logado está carregando resultados." : "";
     redirectWithNotice(
-      `Prospecção concluída: ${summary.discovered} encontrados, ${summary.persisted} novos, ${summary.duplicates} repetidos, ${summary.skippedKnown} já conhecidos pulados, ${summary.filteredOut} filtrados, ${summary.errors} erros. Meta: ${summary.targetNewLeads ?? "sem limite"} novos${summary.targetReached ? " (atingida)" : ""}. Contato automático: ${outreachSummary.prepared} criados, ${outreachSummary.processed} processados.${saveConfig ? " Configuração salva para próximas pesquisas." : ""}${emptyReason}`,
+      `Prospecção concluída (${searchMode === "influencer_network" ? "rede de influenciador" : "buscas por termos"}): ${summary.discovered} encontrados, ${summary.persisted} novos, ${summary.duplicates} repetidos, ${summary.skippedKnown} já conhecidos pulados, ${summary.filteredOut} filtrados, ${summary.errors} erros. Meta: ${summary.targetNewLeads ?? "sem limite"} novos${summary.targetReached ? " (atingida)" : ""}. Contato automático: ${outreachSummary.prepared} criados, ${outreachSummary.processed} processados.${saveConfig ? " Configuração salva para próximas pesquisas." : ""}${emptyReason}`,
     );
   }
 
   revalidatePath("/");
-  redirectWithNotice(`Prospecção enfileirada: ${audienceLabel} com ${keywords.length} buscas. ${saveConfig ? "Configuração salva para próximas pesquisas. " : ""}Modo dry-run: nenhum contato será enviado.`);
+  redirectWithNotice(`Prospecção enfileirada: ${audienceLabel} com ${searchMode === "influencer_network" ? influencerProfiles.length : keywords.length} entradas. ${saveConfig ? "Configuração salva para próximas pesquisas. " : ""}Modo dry-run: nenhum contato será enviado.`);
 }
 
 async function runProspectingKeywords({
+  searchMode,
   keywords,
+  influencerProfiles,
+  audienceLabel,
   maxProfilesPerKeyword,
   targetNewLeads,
   knownUsernames,
 }: {
+  searchMode: "keywords" | "influencer_network";
   keywords: string[];
+  influencerProfiles: string[];
+  audienceLabel: string;
   maxProfilesPerKeyword: number;
   targetNewLeads: number | null;
   knownUsernames: Set<string>;
@@ -188,7 +206,9 @@ async function runProspectingKeywords({
     errorMessage: null as string | null,
   };
 
-  for (const keyword of keywords) {
+  const searchEntries = searchMode === "influencer_network" ? influencerProfiles : keywords;
+
+  for (const keyword of searchEntries) {
     if (targetNewLeads && summary.persisted >= targetNewLeads) {
       summary.targetReached = true;
       break;
@@ -201,7 +221,10 @@ async function runProspectingKeywords({
 
     const remainingTarget = targetNewLeads ? Math.max(targetNewLeads - summary.persisted, 1) : maxProfilesPerKeyword;
     const profilesToRequest = Math.min(Math.max(maxProfilesPerKeyword, Math.ceil(remainingTarget * 1.8)), 50);
-    const discovered = await discoverProfilesFromHashtag({ keyword, maxProfiles: profilesToRequest }).catch((error: unknown) => {
+    const discovered = await (searchMode === "influencer_network"
+      ? discoverProfilesFromInfluencerNetwork({ profile: keyword, audienceLabel, maxProfiles: profilesToRequest })
+      : discoverProfilesFromHashtag({ keyword, maxProfiles: profilesToRequest })
+    ).catch((error: unknown) => {
       summary.errors += 1;
       summary.errorMessage = error instanceof Error ? error.message : "Erro desconhecido ao pesquisar no Instagram.";
       return [];

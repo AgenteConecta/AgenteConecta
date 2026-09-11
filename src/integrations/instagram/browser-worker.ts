@@ -193,6 +193,71 @@ export async function discoverProfilesFromHashtag(params: {
   }
 }
 
+export async function discoverProfilesFromInfluencerNetwork(params: {
+  profile: string;
+  audienceLabel: string;
+  maxProfiles: number;
+}): Promise<LeadProfileInput[]> {
+  const browser = await connectInstagramBrowser();
+  if (!browser) {
+    return [];
+  }
+
+  const context = browser.contexts()[0] ?? (await browser.newContext());
+  const page = await context.newPage();
+  const ownUsername = loadBusinessConfig().channels.instagram.handle.replace(/^@/, "").toLowerCase();
+  const baseUsername = normalizeInstagramUsername(params.profile);
+  const profileUrl = `https://www.instagram.com/${baseUsername}/`;
+  assertInstagramUrl(profileUrl);
+
+  try {
+    await page.goto(profileUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
+    await page.waitForTimeout(3000);
+
+    const loggedOut = await page.evaluate(() => {
+      const text = document.body.textContent?.toLowerCase() ?? "";
+      return text.includes("criar nova conta") || text.includes("sign up") || text.includes("log in");
+    });
+
+    if (loggedOut) {
+      throw new Error("Instagram session is not logged in for the Chrome CDP profile.");
+    }
+
+    const usernames: string[] = [];
+    addUsernames(usernames, await collectVisibleUsernames(page, params.maxProfiles * 4), params.maxProfiles, ownUsername);
+
+    const postUrls = await page.evaluate((limit) => {
+      return Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href^="/p/"], a[href^="/reel/"]'))
+        .map((anchor) => anchor.href)
+        .filter((href, index, all) => all.indexOf(href) === index)
+        .slice(0, limit);
+    }, Math.min(params.maxProfiles, 12));
+
+    for (const postUrl of postUrls) {
+      if (usernames.length >= params.maxProfiles) {
+        break;
+      }
+
+      assertInstagramUrl(postUrl);
+      await page.goto(postUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
+      await page.waitForTimeout(1800);
+      addUsernames(usernames, await collectVisibleUsernames(page, params.maxProfiles * 2), params.maxProfiles, ownUsername);
+    }
+
+    return usernames
+      .filter((username) => username.toLowerCase() !== baseUsername.toLowerCase())
+      .slice(0, params.maxProfiles)
+      .map((username) => ({
+        instagramUsername: `@${username}`,
+        country: "Brasil",
+        discoverySource: "instagram_influencer_network",
+        discoveryKeyword: `rede:${baseUsername}:${params.audienceLabel}`,
+      }));
+  } finally {
+    await page.close();
+  }
+}
+
 async function collectFromInstagramSearchPanel(page: Page, keyword: string, usernames: string[], limit: number, ownUsername: string) {
   await page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 45000 });
   await page.waitForTimeout(1800);
@@ -212,6 +277,15 @@ async function collectFromInstagramSearchPanel(page: Page, keyword: string, user
     await page.waitForTimeout(3500);
     addUsernames(usernames, await collectVisibleUsernames(page, limit * 4), limit, ownUsername);
   }
+}
+
+export function normalizeInstagramUsername(username: string) {
+  return username
+    .replace(/^https?:\/\/(www\.)?instagram\.com\//i, "")
+    .replace(/^@/, "")
+    .split(/[/?#]/)[0]
+    .trim()
+    .toLowerCase();
 }
 
 async function collectVisibleUsernames(page: Page, limit: number) {

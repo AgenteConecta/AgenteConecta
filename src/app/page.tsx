@@ -278,7 +278,7 @@ function LeadStoragePanel({ stats, runs }: { stats: LeadStorageStats; runs: Pros
                   </div>
                   <div className="grid grid-cols-2 gap-1 text-xs text-ink/65">
                     <span>Achados: {run.summary?.discovered ?? 0}</span>
-                    <span>Novos: {run.summary?.persisted ?? 0}</span>
+                    <span>Qualificados novos: {run.summary?.persisted ?? 0}</span>
                     <span>Repetidos: {run.summary?.duplicates ?? 0}</span>
                     <span>Pulados: {run.summary?.skippedKnown ?? 0}</span>
                     <span>Meta: {run.summary?.targetNewLeads ?? "-"}</span>

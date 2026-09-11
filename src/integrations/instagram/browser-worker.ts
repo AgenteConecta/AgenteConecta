@@ -150,6 +150,7 @@ export async function discoverProfilesFromHashtag(params: {
       }
 
       addUsernames(usernames, await collectVisibleUsernames(page, params.maxProfiles * 3), params.maxProfiles, ownUsername);
+      await scrollAndCollectUsernames(page, usernames, params.maxProfiles, ownUsername);
 
       if (usernames.length >= params.maxProfiles) {
         break;
@@ -225,6 +226,7 @@ export async function discoverProfilesFromInfluencerNetwork(params: {
 
     const usernames: string[] = [];
     addUsernames(usernames, await collectVisibleUsernames(page, params.maxProfiles * 4), params.maxProfiles, ownUsername);
+    await scrollAndCollectUsernames(page, usernames, params.maxProfiles, ownUsername);
 
     const postUrls = await page.evaluate((limit) => {
       return Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href^="/p/"], a[href^="/reel/"]'))
@@ -242,6 +244,7 @@ export async function discoverProfilesFromInfluencerNetwork(params: {
       await page.goto(postUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
       await page.waitForTimeout(1800);
       addUsernames(usernames, await collectVisibleUsernames(page, params.maxProfiles * 2), params.maxProfiles, ownUsername);
+      await scrollAndCollectUsernames(page, usernames, params.maxProfiles, ownUsername, 2);
     }
 
     return usernames
@@ -275,6 +278,15 @@ async function collectFromInstagramSearchPanel(page: Page, keyword: string, user
   if ((await searchInput.count()) > 0) {
     await searchInput.fill(keyword, { timeout: 7000 }).catch(() => undefined);
     await page.waitForTimeout(3500);
+    addUsernames(usernames, await collectVisibleUsernames(page, limit * 4), limit, ownUsername);
+    await scrollAndCollectUsernames(page, usernames, limit, ownUsername);
+  }
+}
+
+async function scrollAndCollectUsernames(page: Page, usernames: string[], limit: number, ownUsername: string, maxScrolls = 5) {
+  for (let index = 0; index < maxScrolls && usernames.length < limit; index += 1) {
+    await page.evaluate(() => window.scrollBy(0, Math.max(window.innerHeight * 0.9, 600))).catch(() => undefined);
+    await page.waitForTimeout(1200);
     addUsernames(usernames, await collectVisibleUsernames(page, limit * 4), limit, ownUsername);
   }
 }

@@ -17,7 +17,7 @@ const menu = [
   ["Claims", "#"],
   ["Jobs", "#"],
   ["Custos", "#"],
-  ["Configurações", "#"],
+  ["Configurações", "/settings"],
   ["Logs", "#"],
 ] as const;
 

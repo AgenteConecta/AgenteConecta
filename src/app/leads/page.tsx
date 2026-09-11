@@ -1,9 +1,7 @@
 import { AlertTriangle, ExternalLink, Filter, MessageSquareText, Search, Sparkles, UserRoundSearch } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { CopyTemplatesPanel } from "@/components/copy-templates-panel";
 import { LeadReviewControls } from "@/components/lead-review-controls";
 import { WhatsAppLeadPanel } from "@/components/whatsapp-lead-panel";
-import { getCopyTemplates } from "@/features/conversations/copy-settings";
 import { generateFirstContactVariantsWithSavedCopy } from "@/features/conversations/first-contact";
 import { listLeadPipeline, listLeadsForReview } from "@/features/leads/review-repository";
 import { getOperationalAppMode } from "@/features/safety/app-mode";
@@ -127,15 +125,12 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
   const params = await searchParams;
   const appMode = await getOperationalAppMode();
   const selectedStatus = params.status || "review_pending";
-  const [leads, copyTemplates] = await Promise.all([
-    listLeadsForReview({
-      q: params.q,
-      minScore: params.minScore ? Number(params.minScore) : undefined,
-      status: selectedStatus,
-      leadType: params.type,
-    }),
-    getCopyTemplates().catch(() => ({ all: "", electricians: "" })),
-  ]);
+  const leads = await listLeadsForReview({
+    q: params.q,
+    minScore: params.minScore ? Number(params.minScore) : undefined,
+    status: selectedStatus,
+    leadType: params.type,
+  });
 
   const rows = leads
     .map((lead) => ({
@@ -194,9 +189,6 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
             {params.notice}
           </div>
         ) : null}
-        <div className="mt-4">
-          <CopyTemplatesPanel templates={copyTemplates} returnTo="/leads" />
-        </div>
       </header>
 
       <div className="grid min-h-[calc(100vh-89px)] grid-cols-1 xl:h-[calc(100vh-230px)] xl:min-h-[620px] xl:grid-cols-[minmax(640px,1fr)_minmax(420px,520px)] xl:overflow-hidden">

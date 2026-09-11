@@ -506,7 +506,7 @@ export async function updateLeadReviewStateRecord(input: UpdateLeadReviewInput):
     approve: { channel_state: "approved_for_outreach", human_review_required: false },
     partnership: { channel_state: "partnership_review", human_review_required: true },
     nurture: { channel_state: "nurture_later", human_review_required: false },
-    reject: { channel_state: "rejected", human_review_required: false },
+    reject: { channel_state: "rejected", human_review_required: false, do_not_contact: true },
     do_not_contact: { channel_state: "do_not_contact", human_review_required: false, do_not_contact: true },
   };
 
@@ -533,10 +533,10 @@ export async function updateLeadReviewStateRecord(input: UpdateLeadReviewInput):
     };
   }
 
-  if (input.action === "do_not_contact") {
+  if (input.action === "do_not_contact" || input.action === "reject") {
     await supabase.from("do_not_contact").upsert({
       lead_id: input.leadId,
-      reason: "Marcado manualmente na revisão de leads",
+      reason: input.action === "reject" ? "Descartado manualmente na revisão de leads" : "Marcado manualmente na revisão de leads",
     });
   }
 
@@ -579,7 +579,7 @@ function actionNotice(action: string) {
   const notices: Record<string, string> = {
     partnership: "Lead marcado para parceria/divulgação.",
     nurture: "Lead marcado para nutrir depois.",
-    reject: "Lead descartado.",
+    reject: "Lead descartado e bloqueado para não ser salvo/acionado novamente.",
     do_not_contact: "Lead bloqueado como não contatar.",
   };
 

@@ -8,6 +8,7 @@ export type ProspectingDefaults = {
   audienceLabel: string;
   keywords: string[];
   influencerProfiles: string[];
+  minNewLeads: number;
   targetNewLeads: number;
   maxProfilesPerKeyword: number;
   stopAtTarget: boolean;
@@ -26,6 +27,7 @@ const defaultProspectingDefaults: ProspectingDefaults = {
   audienceLabel: "Automático recomendado",
   keywords: ["automação residencial", "casa inteligente", "automação cabeada", "arquitetura residencial", "elétrica residencial"],
   influencerProfiles: [],
+  minNewLeads: 10,
   targetNewLeads: 15,
   maxProfilesPerKeyword: 15,
   stopAtTarget: true,
@@ -113,6 +115,7 @@ function normalizeProspectingDefaults(value: Partial<ProspectingDefaults>): Pros
     audienceLabel: typeof value.audienceLabel === "string" && value.audienceLabel ? value.audienceLabel : defaultProspectingDefaults.audienceLabel,
     keywords: Array.isArray(value.keywords) && value.keywords.length > 0 ? value.keywords.map(String).filter(Boolean).slice(0, 12) : defaultProspectingDefaults.keywords,
     influencerProfiles: Array.isArray(value.influencerProfiles) ? value.influencerProfiles.map(String).filter(Boolean).slice(0, 12) : defaultProspectingDefaults.influencerProfiles,
+    minNewLeads: Math.min(clampNumber(value.minNewLeads, 1, 15, defaultProspectingDefaults.minNewLeads), clampNumber(value.targetNewLeads, 1, 15, defaultProspectingDefaults.targetNewLeads)),
     targetNewLeads: clampNumber(value.targetNewLeads, 1, 15, defaultProspectingDefaults.targetNewLeads),
     maxProfilesPerKeyword: clampNumber(value.maxProfilesPerKeyword, 1, 50, defaultProspectingDefaults.maxProfilesPerKeyword),
     stopAtTarget: typeof value.stopAtTarget === "boolean" ? value.stopAtTarget : defaultProspectingDefaults.stopAtTarget,

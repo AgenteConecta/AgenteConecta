@@ -28,7 +28,9 @@ export type ProspectingRunSummary = {
     filteredOut?: number;
     errors?: number;
     paused?: boolean;
+    minNewLeads?: number | null;
     targetNewLeads?: number | null;
+    minimumReached?: boolean;
     skippedKnown?: number;
     targetReached?: boolean;
   } | null;
@@ -43,8 +45,10 @@ export async function queueProspectingRun(formData: FormData) {
   const influencerProfiles = parseCustomKeywords(String(formData.get("influencerProfiles") ?? ""));
   const maxProfilesRaw = Number(formData.get("maxProfiles") ?? 15);
   const maxProfilesPerKeyword = Math.max(1, Math.min(Number.isFinite(maxProfilesRaw) ? maxProfilesRaw : 15, 50));
+  const minNewLeadsRaw = Number(formData.get("minNewLeads") ?? 10);
   const targetNewLeadsRaw = Number(formData.get("targetNewLeads") ?? 15);
   const targetNewLeads = Math.max(1, Math.min(Number.isFinite(targetNewLeadsRaw) ? targetNewLeadsRaw : 15, 15));
+  const minNewLeads = Math.min(targetNewLeads, Math.max(1, Math.min(Number.isFinite(minNewLeadsRaw) ? minNewLeadsRaw : 10, 15)));
   const stopAtTarget = formData.get("stopAtTarget") === "on";
   const keywords = (customKeywords.length > 0 ? customKeywords : audience.keywords).slice(0, 12);
   const runNow = formData.get("runNow") === "on";
@@ -65,6 +69,7 @@ export async function queueProspectingRun(formData: FormData) {
       audienceLabel,
       keywords,
       influencerProfiles,
+      minNewLeads,
       targetNewLeads,
       maxProfilesPerKeyword,
       stopAtTarget,
@@ -91,7 +96,7 @@ export async function queueProspectingRun(formData: FormData) {
     redirectWithNotice("Informe ao menos um perfil-base de influenciador para pesquisar contatos qualificados.");
   }
 
-  const idempotencyKey = `discover:${searchMode}:${audienceId}:${idempotencySource.join("|").toLowerCase()}:${maxProfilesPerKeyword}:${stopAtTarget ? targetNewLeads : "open"}:${new Date().toISOString().slice(0, 13)}`;
+  const idempotencyKey = `discover:${searchMode}:${audienceId}:${idempotencySource.join("|").toLowerCase()}:${maxProfilesPerKeyword}:${minNewLeads}:${stopAtTarget ? targetNewLeads : "open"}:${new Date().toISOString()}`;
   const { data: job, error } = await supabase.from("jobs").upsert(
     {
       type: "discover_leads",
@@ -105,6 +110,7 @@ export async function queueProspectingRun(formData: FormData) {
         keywords,
         influencerProfiles,
         maxProfilesPerKeyword,
+        minNewLeads,
         targetNewLeads: stopAtTarget ? targetNewLeads : null,
         stopAtTarget,
         autoContact,
@@ -131,6 +137,7 @@ export async function queueProspectingRun(formData: FormData) {
       influencerProfiles,
       audienceLabel,
       maxProfilesPerKeyword,
+      minNewLeads,
       targetNewLeads: stopAtTarget ? targetNewLeads : null,
       knownUsernames: await getKnownInstagramUsernames(),
     });
@@ -146,7 +153,7 @@ export async function queueProspectingRun(formData: FormData) {
       .from("jobs")
       .update({
         status: summary.paused ? "cancelled" : summary.errors > 0 && summary.persisted === 0 ? "dead" : "completed",
-        last_error: summary.paused ? "Suspenso pela pausa operacional" : summary.errorMessage,
+        last_error: summary.paused ? "Suspenso pela pausa operacional" : summary.minimumReached ? summary.errorMessage : `Mínimo não atingido: ${summary.persisted}/${summary.minNewLeads} qualificados novos salvos.`,
         payload: {
           audienceId,
           searchMode,
@@ -154,6 +161,7 @@ export async function queueProspectingRun(formData: FormData) {
           keywords,
           influencerProfiles,
           maxProfilesPerKeyword,
+          minNewLeads,
           targetNewLeads: stopAtTarget ? targetNewLeads : null,
           targetNewQualifiedLeads: stopAtTarget ? targetNewLeads : null,
           stopAtTarget,
@@ -172,8 +180,9 @@ export async function queueProspectingRun(formData: FormData) {
     revalidatePath("/");
     revalidatePath("/leads");
     const emptyReason = summary.discovered === 0 ? " Nenhum perfil foi capturado no Instagram para essas buscas; tente palavras mais amplas ou verifique se o Chrome logado está carregando resultados." : "";
+    const minimumReason = summary.minimumReached ? "" : ` Atenção: mínimo não atingido (${summary.persisted}/${summary.minNewLeads}); repetidos e leads já salvos não contam.`;
     redirectWithNotice(
-      `Prospecção concluída (${searchMode === "influencer_network" ? "rede de influenciador" : "buscas por termos"}): ${summary.discovered} encontrados, ${summary.persisted} novos qualificados salvos, ${summary.duplicates} repetidos, ${summary.skippedKnown} já conhecidos pulados, ${summary.filteredOut} filtrados, ${summary.errors} erros. Meta: ${summary.targetNewLeads ?? "sem limite"} qualificados${summary.targetReached ? " (atingida)" : ""}. Contato automático: ${outreachSummary.prepared} criados, ${outreachSummary.processed} processados.${saveConfig ? " Configuração salva para próximas pesquisas." : ""}${emptyReason}`,
+      `Prospecção concluída (${searchMode === "influencer_network" ? "rede de influenciador" : "buscas por termos"}): ${summary.discovered} encontrados, ${summary.persisted} novos qualificados salvos, ${summary.duplicates} repetidos, ${summary.skippedKnown} já conhecidos pulados, ${summary.filteredOut} filtrados, ${summary.errors} erros. Mínimo: ${summary.minNewLeads}. Máximo: ${summary.targetNewLeads ?? "sem limite"} qualificados${summary.targetReached ? " (atingido)" : ""}.${minimumReason} Contato automático: ${outreachSummary.prepared} criados, ${outreachSummary.processed} processados.${saveConfig ? " Configuração salva para próximas pesquisas." : ""}${emptyReason}`,
     );
   }
 
@@ -187,6 +196,7 @@ async function runProspectingKeywords({
   influencerProfiles,
   audienceLabel,
   maxProfilesPerKeyword,
+  minNewLeads,
   targetNewLeads,
   knownUsernames,
 }: {
@@ -195,6 +205,7 @@ async function runProspectingKeywords({
   influencerProfiles: string[];
   audienceLabel: string;
   maxProfilesPerKeyword: number;
+  minNewLeads: number;
   targetNewLeads: number | null;
   knownUsernames: Set<string>;
 }) {
@@ -206,7 +217,9 @@ async function runProspectingKeywords({
     filteredOut: 0,
     errors: 0,
     paused: false,
+    minNewLeads,
     targetNewLeads,
+    minimumReached: false,
     targetReached: false,
     diagnostics: [] as string[],
     errorMessage: null as string | null,
@@ -214,12 +227,11 @@ async function runProspectingKeywords({
 
   const searchEntries = searchMode === "influencer_network" ? influencerProfiles : keywords;
 
-  const maxRounds = targetNewLeads ? Math.max(2, Math.ceil(targetNewLeads / Math.max(searchEntries.length, 1)) + 3) : 1;
+  const maxRounds = targetNewLeads ? Math.max(8, Math.ceil(targetNewLeads / Math.max(searchEntries.length, 1)) * 6) : 1;
   let round = 0;
 
   while (searchEntries.length > 0 && round < maxRounds) {
     round += 1;
-    let savedThisRound = 0;
 
     for (const keyword of searchEntries) {
       if (targetNewLeads && summary.persisted >= targetNewLeads) {
@@ -303,7 +315,7 @@ async function runProspectingKeywords({
           knownUsernames.add(normalizedUsername);
         } else if (persistence.mode === "persisted") {
           summary.persisted += 1;
-          savedThisRound += 1;
+          summary.minimumReached = summary.persisted >= minNewLeads;
           knownUsernames.add(normalizedUsername);
         }
       }
@@ -313,7 +325,9 @@ async function runProspectingKeywords({
       }
     }
 
-    if (summary.paused || summary.targetReached || !targetNewLeads || savedThisRound === 0) {
+    summary.minimumReached = summary.persisted >= minNewLeads;
+
+    if (summary.paused || summary.targetReached || !targetNewLeads) {
       break;
     }
   }

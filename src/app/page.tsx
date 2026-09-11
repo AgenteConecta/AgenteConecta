@@ -318,7 +318,8 @@ function LeadStoragePanel({ stats, runs }: { stats: LeadStorageStats; runs: Pros
                     <span>Qualificados novos: {run.summary?.persisted ?? 0}</span>
                     <span>Repetidos: {run.summary?.duplicates ?? 0}</span>
                     <span>Pulados: {run.summary?.skippedKnown ?? 0}</span>
-                    <span>Meta: {run.summary?.targetNewLeads ?? "-"}</span>
+                    <span>Mínimo: {run.summary?.minNewLeads ?? "-"}</span>
+                    <span>Máximo: {run.summary?.targetNewLeads ?? "-"}</span>
                     <span>Erros: {run.summary?.errors ?? 0}</span>
                   </div>
                   <div className="text-xs text-ink/55">

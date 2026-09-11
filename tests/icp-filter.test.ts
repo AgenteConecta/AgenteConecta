@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hasMinimumIcpSignal } from "@/features/prospecting/icp-filter";
+import { hasAudienceIcpSignal, hasMinimumIcpSignal } from "@/features/prospecting/icp-filter";
 
 describe("ICP prospecting filter", () => {
   it("keeps profiles with automation and complementary segment signals", () => {
@@ -17,6 +17,33 @@ describe("ICP prospecting filter", () => {
         instagramUsername: "@perfil_aleatorio",
         bio: "Moda, viagens e lifestyle",
       }),
+    ).toBe(false);
+  });
+
+  it("does not use the searched keyword as proof of fit", () => {
+    expect(
+      hasAudienceIcpSignal(
+        {
+          instagramUsername: "@blog",
+          displayName: "Blog",
+          bio: "Docs",
+          discoveryKeyword: "automação residencial",
+        },
+        "auto",
+      ),
+    ).toBe(false);
+  });
+
+  it("requires signals from the configured audience", () => {
+    expect(
+      hasAudienceIcpSignal(
+        {
+          instagramUsername: "@studio_arq",
+          displayName: "Studio de Arquitetura",
+          bio: "Projetos residenciais e interiores",
+        },
+        "electricians",
+      ),
     ).toBe(false);
   });
 });

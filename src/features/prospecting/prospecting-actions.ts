@@ -6,7 +6,7 @@ import { getSupabaseAdminClient } from "@/integrations/supabase/client";
 import { getProspectingAudience, parseCustomKeywords } from "@/features/prospecting/audiences";
 import { generateFirstContactMessage } from "@/features/conversations/first-contact";
 import { persistDiscoveredLead } from "@/features/leads/lead-repository";
-import { hasMinimumIcpSignal } from "@/features/prospecting/icp-filter";
+import { hasAudienceIcpSignal } from "@/features/prospecting/icp-filter";
 import { discoverProfilesFromHashtag, discoverProfilesFromInfluencerNetwork, isInstagramRateLimitError, readInstagramPublicProfile } from "@/integrations/instagram/browser-worker";
 import { runAutomaticQualifiedOutreach } from "@/features/outreach/outreach-actions";
 import { getOperationalAppMode } from "@/features/safety/app-mode";
@@ -140,6 +140,7 @@ export async function queueProspectingRun(formData: FormData) {
 
     const summary = await runProspectingKeywords({
       searchMode,
+      audienceId,
       keywords,
       influencerProfiles,
       audienceLabel,
@@ -205,6 +206,7 @@ export async function queueProspectingRun(formData: FormData) {
 
 async function runProspectingKeywords({
   searchMode,
+  audienceId,
   keywords,
   influencerProfiles,
   audienceLabel,
@@ -215,6 +217,7 @@ async function runProspectingKeywords({
   onProgress,
 }: {
   searchMode: "keywords" | "influencer_network";
+  audienceId: string;
   keywords: string[];
   influencerProfiles: string[];
   audienceLabel: string;
@@ -310,7 +313,7 @@ async function runProspectingKeywords({
           lead,
         );
 
-        if (!hasMinimumIcpSignal(enrichedLead)) {
+        if (!hasAudienceIcpSignal(enrichedLead, audienceId)) {
           summary.filteredOut += 1;
           summary.diagnostics.push(`${lead.instagramUsername}: filtrado antes de salvar por baixa aderência`);
           knownUsernames.add(normalizedUsername);

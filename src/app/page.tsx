@@ -469,15 +469,15 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
             <div>
               <div className="flex items-center gap-2 text-sm font-medium text-pine">
                 <Bot className="h-4 w-4" />
-                Contato automático qualificado
+                Contato automático sem revisão manual
               </div>
-              <h2 className="mt-2 text-xl font-semibold">Contatar por score ou seguidores</h2>
+              <h2 className="mt-2 text-xl font-semibold">Enviar lote automático por regra</h2>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-ink/65">
-                Seleciona leads ainda não contatados quando atingem o score mínimo ou o mínimo de seguidores capturado no perfil. Respeita do-not-contact e registra tudo no pipeline.
+                Seleciona leads ainda não contatados quando atingem o score mínimo ou o mínimo de seguidores. Não exige aprovação individual, respeita do-not-contact e registra cada resultado no pipeline.
               </p>
               <div className="mt-4 grid gap-2 sm:grid-cols-3">
                 <div className="rounded-md bg-[#f7f8f5] px-3 py-2">
-                  <div className="text-xs text-ink/55">Candidatos por score 70+</div>
+                  <div className="text-xs text-ink/55">Candidatos automáticos</div>
                   <div className="text-2xl font-semibold">{automaticCandidateCount}</div>
                 </div>
                 <div className="rounded-md bg-[#f7f8f5] px-3 py-2">
@@ -485,8 +485,8 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
                   <div className="text-sm font-semibold">{outreachModeLabel(appMode)}</div>
                 </div>
                 <div className="rounded-md bg-[#f7f8f5] px-3 py-2">
-                  <div className="text-xs text-ink/55">Lotes disponíveis</div>
-                  <div className="text-sm font-semibold">5, 10 ou 15 leads</div>
+                  <div className="text-xs text-ink/55">Próximo lote</div>
+                  <div className="text-sm font-semibold">até 10 leads</div>
                 </div>
               </div>
             </div>
@@ -501,7 +501,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
               </label>
               <label className="grid gap-2">
                 <span className="text-xs font-semibold uppercase text-ink/45">Lote</span>
-                <select className="h-10 rounded-md border border-black/10 bg-white px-3 text-sm" defaultValue={5} name="batchSize">
+                <select className="h-10 rounded-md border border-black/10 bg-white px-3 text-sm" defaultValue={10} name="batchSize">
                   <option value={5}>5 leads</option>
                   <option value={10}>10 leads</option>
                   <option value={15}>15 leads</option>
@@ -509,10 +509,10 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
               </label>
               <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-ink px-4 text-sm font-medium text-white transition hover:brightness-95 active:scale-[0.99]">
                 <Bot className="h-4 w-4" />
-                Contatar automaticamente
+                {appMode === "production" ? "Enviar automático agora" : "Preparar lote automático"}
               </button>
               <div className="rounded-md bg-[#f7f8f5] px-3 py-2 text-xs leading-5 text-ink/60">
-                Use valores conservadores no começo. Em dry-run, o contato é criado e processado sem envio real.
+                Em produção, envia sozinho no Instagram. Em piloto, abre/preenche e pede confirmação. Em dry-run, apenas simula e registra.
               </div>
             </form>
           </section>

@@ -134,14 +134,23 @@ export async function getAutomaticOutreachCandidateCount() {
     return 0;
   }
 
-  const { count } = await supabase
+  const { data } = await supabase
     .from("leads")
-    .select("id", { count: "exact", head: true })
-    .gte("lead_score", 70)
+    .select("id, lead_score")
     .eq("do_not_contact", false)
-    .not("channel_state", "in", '("outreach_prepared","operator_confirmation_required","approved_for_outreach","do_not_contact","rejected")');
+    .not("channel_state", "in", '("outreach_prepared","operator_confirmation_required","approved_for_outreach","do_not_contact","rejected")')
+    .limit(1000);
 
-  return count ?? 0;
+  const leads = (data ?? []) as Array<{ id: string; lead_score: number | null }>;
+  const ids = leads.map((lead) => lead.id);
+  const { data: profiles } = ids.length > 0
+    ? await supabase.from("lead_profiles").select("lead_id, public_snapshot").in("lead_id", ids)
+    : { data: [] };
+  const followersByLeadId = new Map(
+    ((profiles ?? []) as LeadProfileRow[]).map((profile) => [profile.lead_id, Number(profile.public_snapshot?.followers ?? 0)]),
+  );
+
+  return leads.filter((lead) => Number(lead.lead_score ?? 0) >= 70 || (followersByLeadId.get(lead.id) ?? 0) >= 10000).length;
 }
 
 export async function processApprovedOutreach(formData: FormData) {

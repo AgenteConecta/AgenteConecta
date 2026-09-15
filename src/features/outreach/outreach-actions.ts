@@ -299,10 +299,12 @@ export async function runAutomaticQualifiedOutreach({
   minScore,
   minFollowers,
   maxMessages,
+  leadIds,
 }: {
   minScore: number;
   minFollowers: number;
   maxMessages: number;
+  leadIds?: string[];
 }) {
   const appMode = await getOperationalAppMode();
   const supabase = getSupabaseAdminClient();
@@ -315,7 +317,7 @@ export async function runAutomaticQualifiedOutreach({
     };
   }
 
-  const { data: leads, error } = await supabase
+  let query = supabase
     .from("leads")
     .select("id, instagram_username, display_name, bio, city, state, discovery_keyword, lead_score, commercial_value_score, lead_type, market_awareness, do_not_contact, channel_state")
     .eq("do_not_contact", false)
@@ -323,6 +325,18 @@ export async function runAutomaticQualifiedOutreach({
     .not("channel_state", "in", '("outreach_prepared","operator_confirmation_required","approved_for_outreach","do_not_contact","rejected")')
     .order("lead_score", { ascending: false })
     .limit(200);
+
+  if (leadIds && leadIds.length > 0) {
+    query = query.in("id", leadIds);
+  } else if (leadIds) {
+    return {
+      prepared: 0,
+      processed: 0,
+      failed: 0,
+    };
+  }
+
+  const { data: leads, error } = await query;
 
   if (error) {
     return {

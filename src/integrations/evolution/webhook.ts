@@ -21,7 +21,27 @@ export function extractEvolutionInbound(payload: EvolutionWebhookPayload) {
     providerMessageId: payload.data?.key?.id ?? null,
     phone,
     displayName: payload.data?.pushName ?? null,
-    text: payload.data?.message?.conversation ?? "",
+    text: normalizeEvolutionInboundText(payload.data?.message?.conversation ?? ""),
     fromMe: payload.data?.key?.fromMe ?? false,
   };
+}
+
+export function normalizeEvolutionInboundText(input: string) {
+  const text = input.trim();
+
+  if (!text) {
+    return "";
+  }
+
+  const looksUrlEncoded = /%[0-9a-f]{2}|\+/.test(text);
+
+  if (!looksUrlEncoded) {
+    return text;
+  }
+
+  try {
+    return decodeURIComponent(text.replace(/\+/g, " ")).trim();
+  } catch {
+    return text;
+  }
 }

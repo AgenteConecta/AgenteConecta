@@ -30,7 +30,7 @@ export async function connectInstagramBrowser(): Promise<Browser | null> {
     return null;
   }
 
-  return chromium.connectOverCDP(env.chromeCdpUrl, { timeout: 5000 });
+  return chromium.connectOverCDP(env.chromeCdpUrl, { timeout: 15000 });
 }
 
 export function hashtagUrl(keyword: string): string {

@@ -34,6 +34,7 @@ export type ProspectingRunSummary = {
     rateLimited?: boolean;
     skippedKnown?: number;
     targetReached?: boolean;
+    savedLeadIds?: string[];
     diagnostics?: string[];
     errorMessage?: string | null;
   } | null;
@@ -161,7 +162,7 @@ export async function queueProspectingRun(formData: FormData) {
           .eq("id", job.id);
       },
     });
-    const finalStatus = summary.paused ? "cancelled" : summary.rateLimited || (summary.errors > 0 && summary.persisted === 0) ? "dead" : "completed";
+    const finalStatus = summary.paused ? "cancelled" : summary.rateLimited || !summary.minimumReached || (summary.errors > 0 && summary.persisted === 0) ? "dead" : "completed";
     const finalError = summary.paused
       ? "Suspenso pela pausa operacional"
       : summary.rateLimited
@@ -169,11 +170,12 @@ export async function queueProspectingRun(formData: FormData) {
         : summary.minimumReached
           ? summary.errorMessage
           : `Mínimo não atingido: ${summary.persisted}/${summary.minNewLeads} qualificados novos salvos.`;
-    const outreachSummary = autoContact
+    const outreachSummary = autoContact && summary.savedLeadIds.length > 0
       ? await runAutomaticQualifiedOutreach({
           minScore,
           minFollowers,
           maxMessages: batchSize,
+          leadIds: summary.savedLeadIds,
         })
       : { prepared: 0, processed: 0, failed: 0 };
 
@@ -240,6 +242,7 @@ async function runProspectingKeywords({
     minimumReached: false,
     rateLimited: false,
     targetReached: false,
+    savedLeadIds: [] as string[],
     diagnostics: [] as string[],
     errorMessage: null as string | null,
   };
@@ -340,6 +343,9 @@ async function runProspectingKeywords({
         } else if (persistence.mode === "persisted") {
           summary.persisted += 1;
           summary.minimumReached = summary.persisted >= minNewLeads;
+          if (persistence.leadId) {
+            summary.savedLeadIds.push(persistence.leadId);
+          }
           knownUsernames.add(normalizedUsername);
           await onProgress?.(summary);
         }

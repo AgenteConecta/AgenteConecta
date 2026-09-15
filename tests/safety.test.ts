@@ -85,4 +85,24 @@ describe("handoffs", () => {
     expect(inbound.phone).toBe("5562998449724");
     expect(inbound.text).toContain("WhatsApp");
   });
+
+  it("decodes URL-encoded Evolution inbound text", () => {
+    const inbound = extractEvolutionInbound({
+      event: "messages.upsert",
+      instance: "newtek",
+      data: {
+        key: {
+          id: "msg_2",
+          remoteJid: "5562998449724@s.whatsapp.net",
+          fromMe: false,
+        },
+        message: {
+          conversation: "Ol%C3%A1%2C%20vim%20pelo%20Instagram%20e%20gostaria%20de%20conhecer%20as%20solu%C3%A7%C3%B5es%20de%20automa%C3%A7%C3%A3o%20residencial%20da%20Newtek",
+        },
+        pushName: "Carlos",
+      },
+    });
+
+    expect(inbound.text).toBe("Olá, vim pelo Instagram e gostaria de conhecer as soluções de automação residencial da Newtek");
+  });
 });
